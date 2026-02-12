@@ -1,32 +1,96 @@
 import 'package:flutter/material.dart';
+import 'dart:io'; // Add this import
 import 'main.dart'; // Import ColorBoard class
 
 class ArchiveTab extends StatelessWidget {
   final List<ColorBoard> savedColorBoards;
   final Function(ColorBoard) onSaveImagesToGallery; // New callback
+  final VoidCallback? onNavigateToTarget; // New callback for navigation
 
   const ArchiveTab({
     super.key,
     required this.savedColorBoards,
     required this.onSaveImagesToGallery,
+    this.onNavigateToTarget,
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('나의 컬렉션'),
-      ),
+      backgroundColor: const Color(0xFFFFFFFF), // Pure white background
       body: savedColorBoards.isEmpty
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.photo_library, size: 80, color: Colors.grey),
-                  SizedBox(height: 20),
-                  Text(
-                    '아직 저장된 컬러 보드가 없습니다.',
-                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                  // Minimalist palette icon with thin lines
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFF5F5F7).withOpacity(0.3),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        Icons.palette_outlined,
+                        size: 60,
+                        color: const Color(0xFFCCCCCC).withOpacity(0.5),
+                        weight: 0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  // Main message
+                  const Text(
+                    '아직 수집된 컬러가 없네요',
+                    style: TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      color: Color(0xFF333333),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Subtitle
+                  const Text(
+                    '오늘의 색을 찾아 일상을 기록해보세요',
+                    style: TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontWeight: FontWeight.w300,
+                      fontSize: 14,
+                      color: Color(0xFF888888),
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 48),
+                  // CTA Button
+                  OutlinedButton(
+                    onPressed: onNavigateToTarget,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF333333),
+                      side: const BorderSide(
+                        color: Color(0xFF333333),
+                        width: 1,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 14,
+                      ),
+                    ),
+                    child: const Text(
+                      '사냥 시작하기',
+                      style: TextStyle(
+                        fontFamily: 'Pretendard',
+                        fontWeight: FontWeight.w500,
+                        fontSize: 15,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -55,7 +119,9 @@ class ArchiveTab extends StatelessWidget {
                                 leading: const Icon(Icons.download),
                                 title: const Text('갤러리에 저장'),
                                 onTap: () {
-                                  Navigator.pop(context); // Close the bottom sheet
+                                  Navigator.pop(
+                                    context,
+                                  ); // Close the bottom sheet
                                   onSaveImagesToGallery(colorBoard);
                                 },
                               ),
@@ -90,30 +156,34 @@ class ArchiveTab extends StatelessWidget {
                         // Image Grid Preview
                         Expanded(
                           child: GridView.builder(
-                            physics: const NeverScrollableScrollPhysics(), // Disable scrolling of inner grid
+                            physics:
+                                const NeverScrollableScrollPhysics(), // Disable scrolling of inner grid
                             shrinkWrap: true,
-                                                      itemCount: colorBoard.gridImagePaths.length,
-                                                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                                        crossAxisCount: 3,
-                                                        childAspectRatio: 1.0,
-                                                        crossAxisSpacing: 2.0,
-                                                        mainAxisSpacing: 2.0,
-                                                      ),
-                                                      itemBuilder: (context, imgIndex) {
-                                                        final imagePath = colorBoard.gridImagePaths[imgIndex];
-                                                        return Container(
-                                                          decoration: BoxDecoration(
-                                                            color: imagePath == null
-                                                                ? Colors.grey.withOpacity(0.2)
-                                                                : null,
-                                                            image: imagePath != null
-                                                                ? DecorationImage(
-                                                                    image: FileImage(File(imagePath)),
-                                                                    fit: BoxFit.cover,
-                                                                  )
-                                                                : null,
-                                                          ),
-                                                        );                            },
+                            itemCount: colorBoard.gridImagePaths.length,
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  childAspectRatio: 1.0,
+                                  crossAxisSpacing: 2.0,
+                                  mainAxisSpacing: 2.0,
+                                ),
+                            itemBuilder: (context, imgIndex) {
+                              final imagePath =
+                                  colorBoard.gridImagePaths[imgIndex];
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: imagePath == null
+                                      ? Colors.grey.withOpacity(0.2)
+                                      : null,
+                                  image: imagePath != null
+                                      ? DecorationImage(
+                                          image: FileImage(File(imagePath)),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null,
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],

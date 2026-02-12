@@ -3,7 +3,11 @@ import 'dart:convert'; // For JSON encoding/decoding
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Import shared_preferences
+import 'package:gal/gal.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image/image.dart' as img; // Import as img to avoid conflicts
+import 'package:path_provider/path_provider.dart'; // Import for temporary directory
+import 'dart:typed_data'; // Import for Uint8List
 
 import 'camera_screen.dart';
 import 'target_tab.dart';
@@ -82,16 +86,13 @@ class ColorBoard {
   final Color targetColor;
   final List<String?> gridImagePaths; // Store paths for serialization
 
-  ColorBoard({
-    required this.targetColor,
-    required this.gridImagePaths,
-  });
+  ColorBoard({required this.targetColor, required this.gridImagePaths});
 
   // Convert ColorBoard to JSON
   Map<String, dynamic> toJson() => {
-        'targetColor': targetColor.value, // Store color as int
-        'gridImagePaths': gridImagePaths,
-      };
+    'targetColor': targetColor.value, // Store color as int
+    'gridImagePaths': gridImagePaths,
+  };
 
   // Create ColorBoard from JSON
   factory ColorBoard.fromJson(Map<String, dynamic> json) {
@@ -111,35 +112,45 @@ class _RootScreenState extends State<RootScreen> {
   List<ColorBoard> _savedColorBoards = []; // Will be loaded from prefs
 
   static const String _kSavedColorBoardsKey = 'savedColorBoards';
-
-  List<Widget> get _widgetOptions => <Widget>[
-        TargetTab(
-          targetColor: _targetColor,
-          onColorSelected: _updateTargetColor,
-          isHuntingActive: _isHuntingActive,
-          onStartHunting: _startHunting,
-        ),
-        HuntingTab(
-          isHuntingActive: _isHuntingActive,
-          targetColor: _targetColor,
-          gridImages: _gridImages,
-          onTakePicture: _pickImageForGridCell,
-          onInitializeSession: _resetHuntingSession,
-          onSaveSession: _saveHuntingSession,
-          onPickMultipleImages: _pickMultipleImages,
-        ),
-        ArchiveTab(
-          savedColorBoards: _savedColorBoards,
-          onSaveImagesToGallery: _saveColorBoardImagesToGallery,
-        ),
-      ];
+  static const String _kCurrentHuntingGridKey = 'currentHuntingGridImagePaths';
+  static const String _kTargetColorKey = 'targetColor';
+  static const String _kIsHuntingActiveKey = 'isHuntingActive';
 
   @override
   void initState() {
     super.initState();
-    _loadSavedColorBoards(); // Load boards on app start
-    _initHuntingSession();
+    _loadHuntingSession(); // Load both boards and current hunting session on app start
   }
+
+  // Define _widgetOptions here, after methods are defined, or as a getter
+  // which references the methods
+  List<Widget> get _widgetOptions => <Widget>[
+    TargetTab(
+      targetColor: _targetColor,
+      onColorSelected: _updateTargetColor,
+      isHuntingActive: _isHuntingActive,
+      onStartHunting: _startHunting,
+    ),
+    HuntingTab(
+      isHuntingActive: _isHuntingActive,
+      targetColor: _targetColor,
+      gridImages: _gridImages,
+      onTakePicture: _pickImageForGridCell,
+      onInitializeSession: _resetHuntingSession,
+      onSaveSession: _saveHuntingSession,
+      onPickMultipleImages: _pickMultipleImages,
+      onNavigateToTarget: () => _onItemTapped(0),
+    ),
+    ArchiveTab(
+      savedColorBoards: _savedColorBoards,
+      onSaveImagesToGallery: _saveColorBoardImagesToGallery,
+      onNavigateToTarget: () {
+        setState(() {
+          _selectedIndex = 0; // Navigate to Target tab
+        });
+      },
+    ),
+  ];
 
   void _onItemTapped(int index) {
     setState(() {
@@ -147,22 +158,80 @@ class _RootScreenState extends State<RootScreen> {
     });
   }
 
-  Future<void> _loadSavedColorBoards() async {
+  Future<void> _loadHuntingSession() async {
     final prefs = await SharedPreferences.getInstance();
-    final String? savedBoardsJson = prefs.getString(_kSavedColorBoardsKey);
 
+    // Load saved color boards
+    final String? savedBoardsJson = prefs.getString(_kSavedColorBoardsKey);
     if (savedBoardsJson != null) {
       final List<dynamic> decodedList = jsonDecode(savedBoardsJson);
       setState(() {
-        _savedColorBoards = decodedList.map((item) => ColorBoard.fromJson(item)).toList();
+        _savedColorBoards = decodedList
+            .map((item) => ColorBoard.fromJson(item))
+            .toList();
+      });
+    }
+
+    // Load target color
+    final int? savedTargetColorValue = prefs.getInt(_kTargetColorKey);
+    final bool savedIsHuntingActive =
+        prefs.getBool(_kIsHuntingActiveKey) ?? false;
+
+    // Load current hunting grid images
+    final List<String>? currentGridImagePaths = prefs.getStringList(
+      _kCurrentHuntingGridKey,
+    );
+    if (currentGridImagePaths != null && currentGridImagePaths.isNotEmpty) {
+      final List<ImageProvider?> loadedImages = List.filled(12, null);
+      bool hasImages = false;
+      for (int i = 0; i < currentGridImagePaths.length; i++) {
+        final path = currentGridImagePaths[i];
+        if (path != null && await File(path).exists()) {
+          loadedImages[i] = FileImage(File(path));
+          hasImages = true;
+        }
+      }
+      setState(() {
+        _gridImages = loadedImages;
+        _isHuntingActive = savedIsHuntingActive && hasImages;
+        _targetColor = savedTargetColorValue != null
+            ? Color(savedTargetColorValue)
+            : Colors.transparent;
+      });
+    } else {
+      // If no saved grid images, ensure hunting session is not active and grid is empty
+      setState(() {
+        _isHuntingActive = false;
+        _gridImages = List.filled(12, null);
+        _targetColor = Colors.transparent;
       });
     }
   }
 
   Future<void> _saveColorBoards() async {
     final prefs = await SharedPreferences.getInstance();
-    final List<Map<String, dynamic>> jsonList = _savedColorBoards.map((board) => board.toJson()).toList();
+    final List<Map<String, dynamic>> jsonList = _savedColorBoards
+        .map((board) => board.toJson())
+        .toList();
     await prefs.setString(_kSavedColorBoardsKey, jsonEncode(jsonList));
+  }
+
+  Future<void> _saveHuntingGridImages() async {
+    final prefs = await SharedPreferences.getInstance();
+    final List<String> imagePaths = _gridImages.map((imageProvider) {
+      if (imageProvider is FileImage) {
+        return imageProvider.file.path;
+      }
+      return ''; // Use an empty string for null images to maintain list length
+    }).toList();
+    await prefs.setStringList(_kCurrentHuntingGridKey, imagePaths);
+  }
+
+  Future<void> _saveHuntingState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kTargetColorKey, _targetColor.value);
+    await prefs.setBool(_kIsHuntingActiveKey, _isHuntingActive);
+    await _saveHuntingGridImages();
   }
 
   void _initHuntingSession() {
@@ -171,6 +240,7 @@ class _RootScreenState extends State<RootScreen> {
       _targetColor = Colors.transparent;
       _gridImages = List.filled(12, null);
     });
+    _saveHuntingGridImages(); // Persist the empty grid state
   }
 
   void _resetHuntingSession() {
@@ -180,15 +250,91 @@ class _RootScreenState extends State<RootScreen> {
       _gridImages = List.filled(12, null);
       _selectedIndex = 0;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Hunting session reset!')),
+    _saveHuntingState(); // Persist the empty grid state and hunting state
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Hunting session reset!')));
+  }
+
+  // Function to create an image collage from a list of image paths
+  Future<File?> _createImageCollage(
+    List<String?> imagePaths,
+    Color targetColor,
+  ) async {
+    const int numColumns = 3;
+    const int numRows = 4;
+    const int imageSize = 300; // Size of each individual image in the collage
+    const int padding = 10; // Padding between images
+
+    final int collageWidth = (imageSize + padding) * numColumns - padding;
+    final int collageHeight = (imageSize + padding) * numRows - padding;
+
+    // Create a new image for the collage with the target color as background
+    final img.Image collage = img.Image(
+      width: collageWidth,
+      height: collageHeight,
     );
+    // Fill the background with the target color
+    img.fill(
+      collage,
+      color: img.ColorRgb8(
+        targetColor.red,
+        targetColor.green,
+        targetColor.blue,
+      ),
+    );
+
+    int currentImageIndex = 0;
+    for (int row = 0; row < numRows; row++) {
+      for (int col = 0; col < numColumns; col++) {
+        if (currentImageIndex < imagePaths.length &&
+            imagePaths[currentImageIndex] != null) {
+          final String? path = imagePaths[currentImageIndex];
+          if (path != null && await File(path).exists()) {
+            final File imageFile = File(path);
+            final List<int> bytes = await imageFile.readAsBytes();
+            img.Image? originalImage = img.decodeImage(
+              Uint8List.fromList(bytes),
+            ); // Convert List<int> to Uint8List
+
+            if (originalImage != null) {
+              // Resize image to fit the grid cell
+              originalImage = img.copyResize(
+                originalImage,
+                width: imageSize,
+                height: imageSize,
+              );
+
+              final int xOffset = col * (imageSize + padding);
+              final int yOffset = row * (imageSize + padding);
+              img.compositeImage(
+                collage,
+                originalImage,
+                dstX: xOffset,
+                dstY: yOffset,
+              );
+            }
+          }
+        }
+        currentImageIndex++;
+      }
+    }
+
+    final directory = await getTemporaryDirectory();
+    final String collagePath =
+        '${directory.path}/collage_${DateTime.now().millisecondsSinceEpoch}.png';
+    final File collageFile = File(collagePath);
+    await collageFile.writeAsBytes(img.encodePng(collage));
+
+    return collageFile;
   }
 
   void _saveHuntingSession() {
     if (_gridImages.any((image) => image == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all grid slots before saving!')),
+        const SnackBar(
+          content: Text('Please fill all grid slots before saving!'),
+        ),
       );
       return;
     }
@@ -202,53 +348,126 @@ class _RootScreenState extends State<RootScreen> {
     }).toList();
 
     setState(() {
-      _savedColorBoards.add(ColorBoard(
-        targetColor: _targetColor,
-        gridImagePaths: imagePaths,
-      ));
+      _savedColorBoards.add(
+        ColorBoard(targetColor: _targetColor, gridImagePaths: imagePaths),
+      );
       _isHuntingActive = false;
       _targetColor = Colors.transparent;
       _gridImages = List.filled(12, null);
       _selectedIndex = 2;
     });
     _saveColorBoards(); // Persist the updated list
+    _saveHuntingState(); // Persist the empty grid state after archiving
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Hunting session saved and archived!')),
     );
   }
 
   Future<void> _saveColorBoardImagesToGallery(ColorBoard colorBoard) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('이미지를 갤러리에 저장 중입니다...')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('콜라주 이미지를 갤러리에 저장 중입니다...')));
 
     try {
-      int savedCount = 0;
-      for (final imagePath in colorBoard.gridImagePaths) {
-        if (imagePath != null && await File(imagePath).exists()) {
-          try {
-            await Gal.putImage(imagePath);
-            savedCount++;
-          } catch (galError) {
-            print('Gal.putImage failed for $imagePath: $galError');
-          }
-        }
+      final File? collageFile = await _createImageCollage(
+        colorBoard.gridImagePaths,
+        colorBoard.targetColor,
+      );
+
+      if (collageFile != null && await collageFile.exists()) {
+        await Gal.putImage(collageFile.path);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('콜라주 이미지를 갤러리에 저장했습니다.')));
+        // Clean up the temporary collage file
+        await collageFile.delete();
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('콜라주 이미지 생성에 실패했습니다.')));
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$savedCount개의 이미지를 갤러리에 저장했습니다.')),
-      );
     } catch (e) {
-      print('An unexpected error occurred while saving images to gallery: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('이미지 저장 실패: $e')),
-      );
+      print(
+        'An unexpected error occurred while saving collage to gallery: $e',
+      ); // Debugging
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('콜라주 이미지 저장 실패: $e')));
     }
   }
 
-  void _updateTargetColor(Color newColor) {
-    setState(() {
-      _targetColor = newColor;
-    });
+  Future<void> _updateTargetColor(Color newColor) async {
+    // Show warning if hunting is already active
+    if (_isHuntingActive) {
+      final bool? shouldChange = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text(
+              '타겟 컬러 변경',
+              style: TextStyle(
+                fontFamily: 'Pretendard',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            content: const Text(
+              '진행 중인 헌팅이 있습니다.\n타겟 컬러를 변경하면 현재 촬영한 사진들이 모두 초기화됩니다.\n\n정말 변경하시겠습니까?',
+              style: TextStyle(
+                fontFamily: 'Pretendard',
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text(
+                  '취소',
+                  style: TextStyle(
+                    fontFamily: 'Pretendard',
+                    color: Color(0xFF888888),
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text(
+                  '변경',
+                  style: TextStyle(
+                    fontFamily: 'Pretendard',
+                    color: Color(0xFF2D2D2D),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (shouldChange != true) {
+        return; // User cancelled, don't change color
+      }
+
+      // Reset hunting session if user confirmed
+      setState(() {
+        _targetColor = newColor;
+        _gridImages = List.filled(12, null);
+        _isHuntingActive = false;
+      });
+      _saveHuntingState();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('타겟 컬러가 변경되었습니다. 새로운 헌팅을 시작해주세요.')),
+      );
+    } else {
+      // No active hunting, just change the color
+      setState(() {
+        _targetColor = newColor;
+      });
+      _saveHuntingState();
+    }
   }
 
   void _startHunting() {
@@ -256,31 +475,57 @@ class _RootScreenState extends State<RootScreen> {
       _isHuntingActive = true;
       _selectedIndex = 1;
     });
+    _saveHuntingState();
+  }
+
+  // Save image to permanent app directory
+  Future<String?> _saveImagePermanently(String sourcePath) async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final fileName =
+          'hunting_img_${DateTime.now().millisecondsSinceEpoch}_${sourcePath.split('/').last}';
+      final permanentPath = '${directory.path}/$fileName';
+
+      final File sourceFile = File(sourcePath);
+      if (await sourceFile.exists()) {
+        await sourceFile.copy(permanentPath);
+        return permanentPath;
+      }
+      return null;
+    } catch (e) {
+      print('Error saving image permanently: $e');
+      return null;
+    }
   }
 
   Future<void> _pickImageForGridCell(int index) async {
-    final ImageSelectionType? selectionType = await showModalBottomSheet<ImageSelectionType>(
-      context: context,
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Take Photo'),
-                onTap: () => Navigator.pop(context, ImageSelectionType.camera),
+    final ImageSelectionType? selectionType =
+        await showModalBottomSheet<ImageSelectionType>(
+          context: context,
+          builder: (BuildContext context) {
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  ListTile(
+                    leading: const Icon(Icons.camera_alt),
+                    title: const Text('Take Photo'),
+                    onTap: () =>
+                        Navigator.pop(context, ImageSelectionType.camera),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.photo_library),
+                    title: const Text('Choose from Gallery'),
+                    onTap: () => Navigator.pop(
+                      context,
+                      ImageSelectionType.gallerySingle,
+                    ),
+                  ),
+                ],
               ),
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Choose from Gallery'),
-                onTap: () => Navigator.pop(context, ImageSelectionType.gallerySingle),
-              ),
-            ],
-          ),
+            );
+          },
         );
-      },
-    );
 
     if (selectionType == null) return;
 
@@ -288,51 +533,66 @@ class _RootScreenState extends State<RootScreen> {
 
     if (selectionType == ImageSelectionType.camera) {
       if (cameras.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No cameras found')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('No cameras found')));
         return;
       }
       imagePath = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => CameraScreen(
-            camera: cameras.first,
-            targetColor: _targetColor,
-          ),
+          builder: (context) =>
+              CameraScreen(camera: cameras.first, targetColor: _targetColor),
         ),
       );
     } else if (selectionType == ImageSelectionType.gallerySingle) {
-      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+      );
       imagePath = pickedFile?.path;
     }
 
     if (imagePath != null) {
-      setState(() {
-        _gridImages[index] = FileImage(File(imagePath!));
-      });
+      // Save image to permanent directory
+      final String? permanentPath = await _saveImagePermanently(imagePath);
+      if (permanentPath != null) {
+        setState(() {
+          _gridImages[index] = FileImage(File(permanentPath));
+        });
+        _saveHuntingState(); // Persist the updated grid and hunting state
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to save image')));
+      }
     }
   }
 
   Future<void> _pickMultipleImages() async {
     final List<XFile>? pickedFiles = await _picker.pickMultiImage();
     if (pickedFiles != null && pickedFiles.isNotEmpty) {
-      setState(() {
-        int currentGridIndex = 0;
-        for (final XFile file in pickedFiles) {
-          while (currentGridIndex < _gridImages.length && _gridImages[currentGridIndex] != null) {
-            currentGridIndex++;
-          }
-          if (currentGridIndex < _gridImages.length) {
-            _gridImages[currentGridIndex] = FileImage(File(file.path));
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No more empty slots to add images!')),
-            );
-            break;
-          }
+      int currentGridIndex = 0;
+      for (final XFile file in pickedFiles) {
+        while (currentGridIndex < _gridImages.length &&
+            _gridImages[currentGridIndex] != null) {
+          currentGridIndex++;
         }
-      });
+        if (currentGridIndex < _gridImages.length) {
+          // Save image to permanent directory
+          final String? permanentPath = await _saveImagePermanently(file.path);
+          if (permanentPath != null) {
+            setState(() {
+              _gridImages[currentGridIndex] = FileImage(File(permanentPath));
+            });
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No more empty slots to add images!')),
+          );
+          break;
+        }
+      }
+      _saveHuntingState(); // Persist the updated grid and hunting state after all images are added
     }
   }
 
@@ -346,15 +606,44 @@ class _RootScreenState extends State<RootScreen> {
 
     switch (_selectedIndex) {
       case 1: // Hunting Tab
-        appBarColor = _targetColor;
-        appBarForegroundColor = Colors.white;
-        titleWidget = const Text('Hunting Color');
+        if (_isHuntingActive) {
+          appBarColor = _targetColor;
+          appBarForegroundColor = Colors.white;
+        } else {
+          appBarColor = Colors.white;
+          appBarForegroundColor = Color(0xFF2D2D2D);
+        }
+        titleWidget = Text(
+          'Color Hunting',
+          style: TextStyle(
+            fontFamily: 'Pretendard',
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+            letterSpacing: -0.5,
+          ),
+        );
         break;
       case 2: // Archive Tab
-        titleWidget = const Text('나의 컬렉션');
+        titleWidget = Text(
+          '나의 컬렉션',
+          style: TextStyle(
+            fontFamily: 'Pretendard',
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+            letterSpacing: -0.5,
+          ),
+        );
         break;
       default: // Target Tab
-        titleWidget = const Text('Color Hunting');
+        titleWidget = Text(
+          'Color Hunting',
+          style: TextStyle(
+            fontFamily: 'Pretendard',
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+            letterSpacing: -0.5,
+          ),
+        );
     }
 
     return Scaffold(
@@ -365,20 +654,53 @@ class _RootScreenState extends State<RootScreen> {
         backgroundColor: appBarColor,
         foregroundColor: appBarForegroundColor,
         elevation: 0,
+        toolbarHeight: 56,
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Container(
+            height: 0.5,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  (_selectedIndex == 1 && _isHuntingActive)
+                      ? appBarForegroundColor.withOpacity(0.1)
+                      : Color(0xFFF0F0F0),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
       body: _widgetOptions.elementAt(_selectedIndex),
       bottomNavigationBar: BottomNavigationBar(
         items: [
           BottomNavigationBarItem(
-            icon: Icon(Icons.circle_outlined, color: _selectedIndex == 0 ? accentColor : Color(0xFF2D2D2D), size: 28, weight: 0.5),
+            icon: Icon(
+              Icons.circle_outlined,
+              color: _selectedIndex == 0 ? accentColor : Color(0xFF2D2D2D),
+              size: 28,
+              weight: 0.5,
+            ),
             label: 'Target',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.grid_3x3, color: _selectedIndex == 1 ? accentColor : Color(0xFF2D2D2D), size: 28, weight: 0.5),
+            icon: Icon(
+              Icons.grid_3x3,
+              color: _selectedIndex == 1 ? accentColor : Color(0xFF2D2D2D),
+              size: 28,
+              weight: 0.5,
+            ),
             label: 'Hunting',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.photo_library_outlined, color: _selectedIndex == 2 ? accentColor : Color(0xFF2D2D2D), size: 28, weight: 0.5),
+            icon: Icon(
+              Icons.photo_library_outlined,
+              color: _selectedIndex == 2 ? accentColor : Color(0xFF2D2D2D),
+              size: 28,
+              weight: 0.5,
+            ),
             label: 'Archive',
           ),
         ],

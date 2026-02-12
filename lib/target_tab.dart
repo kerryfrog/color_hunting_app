@@ -24,60 +24,149 @@ class _TargetTabState extends State<TargetTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+    final accentColor = widget.targetColor == Colors.transparent ? Color(0xFF888888) : widget.targetColor;
+    
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Column(
         children: [
-          GestureDetector(
-            onTap: () {
-              final newColor = Colors.primaries[_random.nextInt(Colors.primaries.length)];
-              widget.onColorSelected(newColor);
-            },
+          // Spacer to push content to center
+          const Spacer(),
+          
+          // Glassmorphism card with color circle
+          Center(
             child: Container(
-              width: 150,
-              height: 150,
+              width: 280,
+              padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: widget.targetColor,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.grey, width: 2),
+                color: Colors.white.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(
+                  color: Colors.grey.withOpacity(0.2),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
               ),
-              child: widget.targetColor == Colors.transparent
-                  ? const Center(
-                      child: Text(
-                        '탭해서 오늘의 색상 정하기',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white, fontSize: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Color circle
+                  GestureDetector(
+                    onTap: () {
+                      final newColor = Colors.primaries[_random.nextInt(Colors.primaries.length)];
+                      widget.onColorSelected(newColor);
+                    },
+                    child: Container(
+                      width: 180,
+                      height: 180,
+                      decoration: BoxDecoration(
+                        color: widget.targetColor == Colors.transparent ? Colors.grey.shade200 : widget.targetColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: widget.targetColor == Colors.transparent ? Colors.grey.shade300 : Colors.white,
+                          width: 3,
+                        ),
                       ),
-                    )
-                  : null,
+                      child: widget.targetColor == Colors.transparent
+                          ? Center(
+                              child: Text(
+                                '탭해서\n색상 정하기',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w300,
+                                  height: 1.4,
+                                ),
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+                  
+                  // HEX code
+                  if (widget.targetColor != Colors.transparent) ...[
+                    const SizedBox(height: 24),
+                    Text(
+                      '#${widget.targetColor.value.toRadixString(16).substring(2).toUpperCase()}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w300,
+                        letterSpacing: 2.0,
+                        color: Color(0xFF2D2D2D),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 20),
-          if (widget.targetColor != Colors.transparent)
-            Text(
-              'HEX: #${widget.targetColor.value.toRadixString(16).substring(2).toUpperCase()}',
-              style: const TextStyle(fontSize: 20),
-            ),
-          const SizedBox(height: 20),
+          
+          const Spacer(),
+          
+          // Bottom buttons
           if (!widget.isHuntingActive && widget.targetColor != Colors.transparent)
-            SizedBox(
-              width: 200, // Fixed width for capsule shape
-              height: 60, // Fixed height for capsule shape
-              child: ElevatedButton(
-                onPressed: widget.onStartHunting,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30.0), // Capsule shape
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        final newColor = Colors.primaries[_random.nextInt(Colors.primaries.length)];
+                        widget.onColorSelected(newColor);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Color(0xFF888888), width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30.0),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        backgroundColor: Colors.white,
+                      ),
+                      child: Text(
+                        '다시 고르기',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Color(0xFF888888),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
                   ),
-                  elevation: 10, // Shadow effect
-                ),
-                child: const Text(
-                  'Hunting 시작하기',
-                  style: TextStyle(fontSize: 20, color: Colors.white),
-                ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: widget.onStartHunting,
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: accentColor, width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30.0),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        backgroundColor: accentColor,
+                      ),
+                      child: const Text(
+                        'Hunting 시작',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
+            )
+          else
+            const SizedBox(height: 40),
         ],
       ),
     );
