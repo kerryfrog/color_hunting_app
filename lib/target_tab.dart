@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'l10n/app_localizations.dart';
 import 'dart:math';
 
 class TargetTab extends StatefulWidget {
@@ -24,15 +25,18 @@ class _TargetTabState extends State<TargetTab> {
 
   @override
   Widget build(BuildContext context) {
-    final accentColor = widget.targetColor == Colors.transparent ? Color(0xFF888888) : widget.targetColor;
-    
+    final l10n = AppLocalizations.of(context)!;
+    final accentColor = widget.targetColor == Colors.transparent
+        ? Color(0xFF888888)
+        : widget.targetColor;
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Column(
         children: [
           // Spacer to push content to center
           const Spacer(),
-          
+
           // Glassmorphism card with color circle
           Center(
             child: Container(
@@ -59,24 +63,29 @@ class _TargetTabState extends State<TargetTab> {
                   // Color circle
                   GestureDetector(
                     onTap: () {
-                      final newColor = Colors.primaries[_random.nextInt(Colors.primaries.length)];
+                      final newColor = Colors
+                          .primaries[_random.nextInt(Colors.primaries.length)];
                       widget.onColorSelected(newColor);
                     },
                     child: Container(
                       width: 180,
                       height: 180,
                       decoration: BoxDecoration(
-                        color: widget.targetColor == Colors.transparent ? Colors.grey.shade200 : widget.targetColor,
+                        color: widget.targetColor == Colors.transparent
+                            ? Colors.grey.shade200
+                            : widget.targetColor,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: widget.targetColor == Colors.transparent ? Colors.grey.shade300 : Colors.white,
+                          color: widget.targetColor == Colors.transparent
+                              ? Colors.grey.shade300
+                              : Colors.white,
                           width: 3,
                         ),
                       ),
                       child: widget.targetColor == Colors.transparent
                           ? Center(
                               child: Text(
-                                '탭해서\n색상 정하기',
+                                l10n.targetTapToPick,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
@@ -89,7 +98,7 @@ class _TargetTabState extends State<TargetTab> {
                           : null,
                     ),
                   ),
-                  
+
                   // HEX code
                   if (widget.targetColor != Colors.transparent) ...[
                     const SizedBox(height: 24),
@@ -107,11 +116,12 @@ class _TargetTabState extends State<TargetTab> {
               ),
             ),
           ),
-          
+
           const Spacer(),
-          
+
           // Bottom buttons
-          if (!widget.isHuntingActive && widget.targetColor != Colors.transparent)
+          if (!widget.isHuntingActive &&
+              widget.targetColor != Colors.transparent)
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
               child: Row(
@@ -119,7 +129,10 @@ class _TargetTabState extends State<TargetTab> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {
-                        final newColor = Colors.primaries[_random.nextInt(Colors.primaries.length)];
+                        final newColor =
+                            Colors.primaries[_random.nextInt(
+                              Colors.primaries.length,
+                            )];
                         widget.onColorSelected(newColor);
                       },
                       style: OutlinedButton.styleFrom(
@@ -131,7 +144,7 @@ class _TargetTabState extends State<TargetTab> {
                         backgroundColor: Colors.white,
                       ),
                       child: Text(
-                        '다시 고르기',
+                        l10n.targetPickAgain,
                         style: TextStyle(
                           fontSize: 16,
                           color: Color(0xFF888888),
@@ -152,9 +165,9 @@ class _TargetTabState extends State<TargetTab> {
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         backgroundColor: accentColor,
                       ),
-                      child: const Text(
-                        'Hunting 시작',
-                        style: TextStyle(
+                      child: Text(
+                        l10n.targetStartHunting,
+                        style: const TextStyle(
                           fontSize: 16,
                           color: Colors.white,
                           fontWeight: FontWeight.w600,

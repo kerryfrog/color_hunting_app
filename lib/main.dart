@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:convert'; // For JSON encoding/decoding
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'l10n/app_localizations.dart';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:gal/gal.dart';
@@ -35,6 +37,14 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Color Hunting App',
+      debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData(
         fontFamily: 'Pretendard',
         scaffoldBackgroundColor: Colors.white,
@@ -82,6 +92,8 @@ class RootScreen extends StatefulWidget {
 
 enum ImageSelectionType { camera, gallerySingle, galleryMultiple }
 
+enum AppLanguage { ko, en, ja, zh }
+
 class ColorBoard {
   final Color targetColor;
   final List<String?> gridImagePaths; // Store paths for serialization
@@ -122,6 +134,13 @@ class ColorBoard {
   }
 }
 
+class _MemoDialogResult {
+  final bool shouldSave;
+  final String? memo;
+
+  const _MemoDialogResult({required this.shouldSave, this.memo});
+}
+
 class _RootScreenState extends State<RootScreen> {
   int _selectedIndex = 0;
   Color _targetColor = Colors.transparent;
@@ -130,17 +149,72 @@ class _RootScreenState extends State<RootScreen> {
   final ImagePicker _picker = ImagePicker();
   List<ColorBoard> _savedColorBoards = []; // Will be loaded from prefs
   DateTime? _huntingStartDate; // Track when hunting started
+  AppLanguage _appLanguage = AppLanguage.ko;
 
   static const String _kSavedColorBoardsKey = 'savedColorBoards';
   static const String _kCurrentHuntingGridKey = 'currentHuntingGridImagePaths';
   static const String _kTargetColorKey = 'targetColor';
   static const String _kIsHuntingActiveKey = 'isHuntingActive';
   static const String _kHuntingStartDateKey = 'huntingStartDate';
+  static const String _kAppLanguageKey = 'appLanguage';
+
+  Locale get _currentLocale => switch (_appLanguage) {
+    AppLanguage.ko => const Locale('ko'),
+    AppLanguage.en => const Locale('en'),
+    AppLanguage.ja => const Locale('ja'),
+    AppLanguage.zh => const Locale('zh'),
+  };
+
+  AppLocalizations get _currentL10n => lookupAppLocalizations(_currentLocale);
 
   @override
   void initState() {
     super.initState();
     _loadHuntingSession(); // Load both boards and current hunting session on app start
+    _addTestData(); // Add test data for UI testing
+  }
+
+  // Add test data for UI testing
+  Future<void> _addTestData() async {
+    // Only add if no data exists
+    if (_savedColorBoards.isEmpty) {
+      final testBoard1 = ColorBoard(
+        targetColor: const Color(0xFFFF6B6B),
+        gridImagePaths: List.filled(12, ''),
+        memo: '데모용 컬러 헌팅',
+        createdDate: DateTime(2026, 1, 2),
+        completedDate: DateTime(2026, 1, 2),
+      );
+
+      final testBoard2 = ColorBoard(
+        targetColor: const Color(0xFF4ECDC4),
+        gridImagePaths: List.filled(12, ''),
+        memo: '여러 날에 걸친 헌팅',
+        createdDate: DateTime(2026, 1, 5),
+        completedDate: DateTime(2026, 1, 6),
+      );
+
+      final testBoard3 = ColorBoard(
+        targetColor: const Color(0xFFFFA07A),
+        gridImagePaths: List.filled(12, ''),
+        memo: '2월 첫 헌팅',
+        createdDate: DateTime(2026, 2, 1),
+        completedDate: DateTime(2026, 2, 1),
+      );
+
+      setState(() {
+        _savedColorBoards.add(testBoard1);
+        _savedColorBoards.add(testBoard2);
+        _savedColorBoards.add(testBoard3);
+      });
+
+      // Save to preferences
+      final prefs = await SharedPreferences.getInstance();
+      final boardsJson = jsonEncode(
+        _savedColorBoards.map((board) => board.toJson()).toList(),
+      );
+      await prefs.setString(_kSavedColorBoardsKey, boardsJson);
+    }
   }
 
   // Define _widgetOptions here, after methods are defined, or as a getter
@@ -165,6 +239,7 @@ class _RootScreenState extends State<RootScreen> {
     ),
     ArchiveTab(
       savedColorBoards: _savedColorBoards,
+      currentLocale: _currentLocale,
       onSaveImagesToGallery: _saveColorBoardImagesToGallery,
       onDeleteColorBoard: _deleteColorBoard,
       onNavigateToTarget: () {
@@ -181,8 +256,136 @@ class _RootScreenState extends State<RootScreen> {
     });
   }
 
+  Future<void> _setAppLanguage(
+    AppLanguage language,
+    BuildContext l10nContext,
+  ) async {
+    setState(() {
+      _appLanguage = language;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _kAppLanguageKey,
+      switch (language) {
+        AppLanguage.ko => 'ko',
+        AppLanguage.en => 'en',
+        AppLanguage.ja => 'ja',
+        AppLanguage.zh => 'zh',
+      },
+    );
+
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(l10nContext)!;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          switch (language) {
+            AppLanguage.ko => l10n.languageSelectedKo,
+            AppLanguage.en => l10n.languageSelectedEn,
+            AppLanguage.ja => l10n.languageSelectedJa,
+            AppLanguage.zh => l10n.languageSelectedZh,
+          },
+          style: const TextStyle(
+            fontFamily: 'Pretendard',
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  void _showLanguageSheet(BuildContext l10nContext) {
+    showModalBottomSheet(
+      context: l10nContext,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDDDDDD),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.language),
+                title: Text(l10n.languageKorean),
+                trailing: _appLanguage == AppLanguage.ko
+                    ? const Icon(Icons.check, size: 20)
+                    : null,
+                onTap: () {
+                  Navigator.pop(context);
+                  _setAppLanguage(AppLanguage.ko, l10nContext);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.language),
+                title: Text(l10n.languageEnglish),
+                trailing: _appLanguage == AppLanguage.en
+                    ? const Icon(Icons.check, size: 20)
+                    : null,
+                onTap: () {
+                  Navigator.pop(context);
+                  _setAppLanguage(AppLanguage.en, l10nContext);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.language),
+                title: Text(l10n.languageJapanese),
+                trailing: _appLanguage == AppLanguage.ja
+                    ? const Icon(Icons.check, size: 20)
+                    : null,
+                onTap: () {
+                  Navigator.pop(context);
+                  _setAppLanguage(AppLanguage.ja, l10nContext);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.language),
+                title: Text(l10n.languageChinese),
+                trailing: _appLanguage == AppLanguage.zh
+                    ? const Icon(Icons.check, size: 20)
+                    : null,
+                onTap: () {
+                  Navigator.pop(context);
+                  _setAppLanguage(AppLanguage.zh, l10nContext);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _loadHuntingSession() async {
     final prefs = await SharedPreferences.getInstance();
+
+    final String? savedLanguage = prefs.getString(_kAppLanguageKey);
+    if (savedLanguage != null) {
+      setState(() {
+        _appLanguage = switch (savedLanguage) {
+          'en' => AppLanguage.en,
+          'ja' => AppLanguage.ja,
+          'zh' => AppLanguage.zh,
+          _ => AppLanguage.ko,
+        };
+      });
+    }
 
     // Load saved color boards
     final String? savedBoardsJson = prefs.getString(_kSavedColorBoardsKey);
@@ -361,17 +564,20 @@ class _RootScreenState extends State<RootScreen> {
   }
 
   void _saveHuntingSession() async {
+    final l10n = _currentL10n;
     if (_gridImages.any((image) => image == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill all grid slots before saving!'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.fillAllSlots)));
       return;
     }
 
     // Show memo input dialog
-    final String? memo = await _showMemoDialog();
+    final _MemoDialogResult? memoResult = await _showMemoDialog();
+    if (memoResult == null || !memoResult.shouldSave) {
+      return;
+    }
+    final String? memo = memoResult.memo;
 
     // Convert ImageProvider to file paths for serialization
     final List<String?> imagePaths = _gridImages.map((imageProvider) {
@@ -401,15 +607,16 @@ class _RootScreenState extends State<RootScreen> {
     });
     _saveColorBoards(); // Persist the updated list
     _saveHuntingState(); // Persist the empty grid state after archiving
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Hunting session saved and archived!')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.huntingSavedArchived)));
   }
 
   Future<void> _saveColorBoardImagesToGallery(ColorBoard colorBoard) async {
+    final l10n = AppLocalizations.of(context)!;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('콜라주 이미지를 갤러리에 저장 중입니다...')));
+    ).showSnackBar(SnackBar(content: Text(l10n.collageSaving)));
 
     try {
       final File? collageFile = await _createImageCollage(
@@ -421,57 +628,59 @@ class _RootScreenState extends State<RootScreen> {
         await Gal.putImage(collageFile.path);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('콜라주 이미지를 갤러리에 저장했습니다.')));
+        ).showSnackBar(SnackBar(content: Text(l10n.collageSaved)));
         // Clean up the temporary collage file
         await collageFile.delete();
       } else {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('콜라주 이미지 생성에 실패했습니다.')));
+        ).showSnackBar(SnackBar(content: Text(l10n.collageFailed)));
       }
     } catch (e) {
       print(
         'An unexpected error occurred while saving collage to gallery: $e',
       ); // Debugging
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('콜라주 이미지 저장 실패: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.collageSaveError(e.toString()))),
+      );
     }
   }
 
   Future<void> _deleteColorBoard(ColorBoard colorBoard) async {
+    final l10n = AppLocalizations.of(context)!;
     setState(() {
       _savedColorBoards.remove(colorBoard);
     });
     await _saveColorBoards();
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
-          '컬렉션이 삭제되었습니다',
-          style: TextStyle(
+          l10n.collectionDeleted,
+          style: const TextStyle(
             fontFamily: 'Pretendard',
             fontWeight: FontWeight.w500,
           ),
         ),
         behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
 
-  Future<String?> _showMemoDialog() async {
+  Future<_MemoDialogResult?> _showMemoDialog() async {
     final TextEditingController memoController = TextEditingController();
+    final l10n = _currentL10n;
 
-    return showDialog<String>(
+    return showDialog<_MemoDialogResult>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text(
-            '오늘의 기록',
+          title: Text(
+            l10n.memoTitle,
             style: TextStyle(
               fontFamily: 'Pretendard',
               fontWeight: FontWeight.w700,
@@ -484,7 +693,7 @@ class _RootScreenState extends State<RootScreen> {
             maxLines: 5,
             maxLength: 200,
             decoration: InputDecoration(
-              hintText: '이날의 특별한 순간들을 기록해보세요.',
+              hintText: l10n.memoHint,
               hintStyle: const TextStyle(
                 fontFamily: 'Pretendard',
                 fontWeight: FontWeight.w300,
@@ -510,9 +719,12 @@ class _RootScreenState extends State<RootScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, null),
-              child: const Text(
-                '건너뛰기',
+              onPressed: () => Navigator.pop(
+                context,
+                const _MemoDialogResult(shouldSave: true),
+              ),
+              child: Text(
+                l10n.skip,
                 style: TextStyle(
                   fontFamily: 'Pretendard',
                   fontWeight: FontWeight.w500,
@@ -523,11 +735,13 @@ class _RootScreenState extends State<RootScreen> {
             ),
             ElevatedButton(
               onPressed: () {
+                final trimmedMemo = memoController.text.trim();
                 Navigator.pop(
                   context,
-                  memoController.text.trim().isEmpty
-                      ? null
-                      : memoController.text.trim(),
+                  _MemoDialogResult(
+                    shouldSave: true,
+                    memo: trimmedMemo.isEmpty ? null : trimmedMemo,
+                  ),
                 );
               },
               style: ElevatedButton.styleFrom(
@@ -542,9 +756,9 @@ class _RootScreenState extends State<RootScreen> {
                   vertical: 12,
                 ),
               ),
-              child: const Text(
-                '저장',
-                style: TextStyle(
+              child: Text(
+                l10n.save,
+                style: const TextStyle(
                   fontFamily: 'Pretendard',
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
@@ -560,19 +774,20 @@ class _RootScreenState extends State<RootScreen> {
   Future<void> _updateTargetColor(Color newColor) async {
     // Show warning if hunting is already active
     if (_isHuntingActive) {
+      final l10n = AppLocalizations.of(context)!;
       final bool? shouldChange = await showDialog<bool>(
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
-            title: const Text(
-              '타겟 컬러 변경',
+            title: Text(
+              l10n.changeTargetTitle,
               style: TextStyle(
                 fontFamily: 'Pretendard',
                 fontWeight: FontWeight.w600,
               ),
             ),
-            content: const Text(
-              '진행 중인 헌팅이 있습니다.\n타겟 컬러를 변경하면 현재 촬영한 사진들이 모두 초기화됩니다.\n\n정말 변경하시겠습니까?',
+            content: Text(
+              l10n.changeTargetBody,
               style: TextStyle(
                 fontFamily: 'Pretendard',
                 fontWeight: FontWeight.w400,
@@ -584,8 +799,8 @@ class _RootScreenState extends State<RootScreen> {
             actions: <Widget>[
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text(
-                  '취소',
+                child: Text(
+                  l10n.cancel,
                   style: TextStyle(
                     fontFamily: 'Pretendard',
                     color: Color(0xFF888888),
@@ -594,8 +809,8 @@ class _RootScreenState extends State<RootScreen> {
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text(
-                  '변경',
+                child: Text(
+                  l10n.change,
                   style: TextStyle(
                     fontFamily: 'Pretendard',
                     color: Color(0xFF2D2D2D),
@@ -619,9 +834,9 @@ class _RootScreenState extends State<RootScreen> {
         _isHuntingActive = false;
       });
       _saveHuntingState();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('타겟 컬러가 변경되었습니다. 새로운 헌팅을 시작해주세요.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.targetChanged)));
     } else {
       // No active hunting, just change the color
       setState(() {
@@ -661,6 +876,7 @@ class _RootScreenState extends State<RootScreen> {
   }
 
   Future<void> _pickImageForGridCell(int index) async {
+    final l10n = _currentL10n;
     final ImageSelectionType? selectionType =
         await showModalBottomSheet<ImageSelectionType>(
           context: context,
@@ -671,13 +887,13 @@ class _RootScreenState extends State<RootScreen> {
                 children: <Widget>[
                   ListTile(
                     leading: const Icon(Icons.camera_alt),
-                    title: const Text('Take Photo'),
+                    title: Text(l10n.takePhoto),
                     onTap: () =>
                         Navigator.pop(context, ImageSelectionType.camera),
                   ),
                   ListTile(
                     leading: const Icon(Icons.photo_library),
-                    title: const Text('Choose from Gallery'),
+                    title: Text(l10n.chooseGallery),
                     onTap: () => Navigator.pop(
                       context,
                       ImageSelectionType.gallerySingle,
@@ -697,7 +913,7 @@ class _RootScreenState extends State<RootScreen> {
       if (cameras.isEmpty) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('No cameras found')));
+        ).showSnackBar(SnackBar(content: Text(l10n.noCamerasFound)));
         return;
       }
       imagePath = await Navigator.push(
@@ -781,121 +997,144 @@ class _RootScreenState extends State<RootScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final accentColor = Color(0xFF888888);
+    final locale = _currentLocale;
 
-    Widget titleWidget;
-    Color appBarColor = Colors.white;
-    Color appBarForegroundColor = Color(0xFF2D2D2D);
+    return Localizations.override(
+      context: context,
+      locale: locale,
+      child: Builder(
+        builder: (context) {
+          final l10n = AppLocalizations.of(context)!;
+          final accentColor = const Color(0xFF888888);
 
-    switch (_selectedIndex) {
-      case 1: // Hunting Tab
-        if (_isHuntingActive) {
-          appBarColor = _targetColor;
-          appBarForegroundColor = Colors.white;
-        } else {
-          appBarColor = Colors.white;
-          appBarForegroundColor = Color(0xFF2D2D2D);
-        }
-        titleWidget = Text(
-          'Color Hunting',
-          style: TextStyle(
-            fontFamily: 'Pretendard',
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
-            letterSpacing: -0.5,
-          ),
-        );
-        break;
-      case 2: // Archive Tab
-        titleWidget = Text(
-          '나의 컬렉션',
-          style: TextStyle(
-            fontFamily: 'Pretendard',
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
-            letterSpacing: -0.5,
-          ),
-        );
-        break;
-      default: // Target Tab
-        titleWidget = Text(
-          'Color Hunting',
-          style: TextStyle(
-            fontFamily: 'Pretendard',
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
-            letterSpacing: -0.5,
-          ),
-        );
-    }
+          Widget titleWidget;
+          Color appBarColor = Colors.white;
+          Color appBarForegroundColor = const Color(0xFF2D2D2D);
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: titleWidget,
-        centerTitle: true,
-        backgroundColor: appBarColor,
-        foregroundColor: appBarForegroundColor,
-        elevation: 0,
-        toolbarHeight: 56,
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Container(
-            height: 0.5,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.transparent,
-                  (_selectedIndex == 1 && _isHuntingActive)
-                      ? appBarForegroundColor.withOpacity(0.1)
-                      : Color(0xFFF0F0F0),
-                  Colors.transparent,
-                ],
+          switch (_selectedIndex) {
+            case 1: // Hunting Tab
+              if (_isHuntingActive) {
+                appBarColor = _targetColor;
+                appBarForegroundColor = Colors.white;
+              } else {
+                appBarColor = Colors.white;
+                appBarForegroundColor = const Color(0xFF2D2D2D);
+              }
+              titleWidget = Text(
+                l10n.appbarHunting,
+                style: const TextStyle(
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 18,
+                  letterSpacing: -0.5,
+                ),
+              );
+              break;
+            case 2: // Archive Tab
+              titleWidget = Text(
+                l10n.appbarCollection,
+                style: const TextStyle(
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 18,
+                  letterSpacing: -0.5,
+                ),
+              );
+              break;
+            default: // Target Tab
+              titleWidget = Text(
+                l10n.appbarTarget,
+                style: const TextStyle(
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 18,
+                  letterSpacing: -0.5,
+                ),
+              );
+          }
+
+          return Scaffold(
+            backgroundColor: Colors.white,
+            appBar: AppBar(
+              title: titleWidget,
+              centerTitle: true,
+              backgroundColor: appBarColor,
+              foregroundColor: appBarForegroundColor,
+              elevation: 0,
+              toolbarHeight: 56,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.language),
+                  onPressed: () => _showLanguageSheet(context),
+                ),
+              ],
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(
+                  height: 0.5,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        (_selectedIndex == 1 && _isHuntingActive)
+                            ? appBarForegroundColor.withOpacity(0.1)
+                            : const Color(0xFFF0F0F0),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-      ),
-      body: _widgetOptions.elementAt(_selectedIndex),
-      bottomNavigationBar: BottomNavigationBar(
-        items: [
-          BottomNavigationBarItem(
-            icon: Icon(
-              Icons.circle_outlined,
-              color: _selectedIndex == 0 ? accentColor : Color(0xFF2D2D2D),
-              size: 28,
-              weight: 0.5,
+            body: _widgetOptions.elementAt(_selectedIndex),
+            bottomNavigationBar: BottomNavigationBar(
+              items: [
+                BottomNavigationBarItem(
+                  icon: Icon(
+                    Icons.circle_outlined,
+                    color: _selectedIndex == 0
+                        ? accentColor
+                        : const Color(0xFF2D2D2D),
+                    size: 28,
+                    weight: 0.5,
+                  ),
+                  label: l10n.navTarget,
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(
+                    Icons.grid_3x3,
+                    color: _selectedIndex == 1
+                        ? accentColor
+                        : const Color(0xFF2D2D2D),
+                    size: 28,
+                    weight: 0.5,
+                  ),
+                  label: l10n.navHunting,
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(
+                    Icons.photo_library_outlined,
+                    color: _selectedIndex == 2
+                        ? accentColor
+                        : const Color(0xFF2D2D2D),
+                    size: 28,
+                    weight: 0.5,
+                  ),
+                  label: l10n.navCollection,
+                ),
+              ],
+              currentIndex: _selectedIndex,
+              onTap: _onItemTapped,
+              selectedItemColor: accentColor,
+              unselectedItemColor: const Color(0xFF2D2D2D),
+              showSelectedLabels: true,
+              showUnselectedLabels: true,
+              type: BottomNavigationBarType.fixed,
+              backgroundColor: Colors.white,
+              elevation: 0,
             ),
-            label: 'Target',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(
-              Icons.grid_3x3,
-              color: _selectedIndex == 1 ? accentColor : Color(0xFF2D2D2D),
-              size: 28,
-              weight: 0.5,
-            ),
-            label: 'Hunting',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(
-              Icons.photo_library_outlined,
-              color: _selectedIndex == 2 ? accentColor : Color(0xFF2D2D2D),
-              size: 28,
-              weight: 0.5,
-            ),
-            label: 'Archive',
-          ),
-        ],
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        selectedItemColor: accentColor,
-        unselectedItemColor: Color(0xFF2D2D2D),
-        showSelectedLabels: true,
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        elevation: 0,
+          );
+        },
       ),
     );
   }

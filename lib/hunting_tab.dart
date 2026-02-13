@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'l10n/app_localizations.dart';
 
 class HuntingTab extends StatelessWidget {
   final bool isHuntingActive;
@@ -26,6 +27,7 @@ class HuntingTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final accentColor = Color(0xFF888888); // Neutral gray accent color
     if (!isHuntingActive) {
       return Container(
@@ -54,9 +56,9 @@ class HuntingTab extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 32),
-                  const Text(
-                    '아직 타겟 컬러가 없어요',
-                    style: TextStyle(
+                  Text(
+                    l10n.huntingEmptyTitle,
+                    style: const TextStyle(
                       fontFamily: 'Pretendard',
                       fontWeight: FontWeight.w700,
                       fontSize: 18,
@@ -65,9 +67,9 @@ class HuntingTab extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Target 탭에서 오늘의 색상을 먼저 골라보세요',
-                    style: TextStyle(
+                  Text(
+                    l10n.huntingEmptySubtitle,
+                    style: const TextStyle(
                       fontFamily: 'Pretendard',
                       fontWeight: FontWeight.w300,
                       fontSize: 14,
@@ -92,9 +94,9 @@ class HuntingTab extends StatelessWidget {
                         vertical: 14,
                       ),
                     ),
-                    child: const Text(
-                      '타겟 컬러 정하기',
-                      style: TextStyle(
+                    child: Text(
+                      l10n.huntingSetTarget,
+                      style: const TextStyle(
                         fontFamily: 'Pretendard',
                         fontWeight: FontWeight.w500,
                         fontSize: 15,
@@ -205,9 +207,9 @@ class HuntingTab extends StatelessWidget {
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
-                    child: const Text(
-                      '초기화',
-                      style: TextStyle(
+                    child: Text(
+                      l10n.huntingReset,
+                      style: const TextStyle(
                         fontFamily: 'Pretendard',
                         fontWeight: FontWeight.w500,
                         fontSize: 15,
@@ -232,7 +234,7 @@ class HuntingTab extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     child: Text(
-                      'Save',
+                      l10n.save,
                       style: TextStyle(
                         fontFamily: 'Pretendard',
                         fontWeight: FontWeight.w600,
@@ -254,6 +256,7 @@ class HuntingTab extends StatelessWidget {
   }
 
   void _showImageOptions(BuildContext context, int index) {
+    final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -280,9 +283,9 @@ class HuntingTab extends StatelessWidget {
                   Icons.delete_outline,
                   color: Color(0xFFE53935),
                 ),
-                title: const Text(
-                  '이미지 제거',
-                  style: TextStyle(
+                title: Text(
+                  l10n.huntingRemoveImage,
+                  style: const TextStyle(
                     fontFamily: 'Pretendard',
                     fontWeight: FontWeight.w500,
                     fontSize: 15,
@@ -299,9 +302,9 @@ class HuntingTab extends StatelessWidget {
                   Icons.camera_alt_outlined,
                   color: Color(0xFF333333),
                 ),
-                title: const Text(
-                  '다른 사진 찍기',
-                  style: TextStyle(
+                title: Text(
+                  l10n.huntingTakeAnother,
+                  style: const TextStyle(
                     fontFamily: 'Pretendard',
                     fontWeight: FontWeight.w500,
                     fontSize: 15,

@@ -8,10 +8,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:share_plus/share_plus.dart';
+import 'l10n/app_localizations.dart';
 import 'main.dart';
 
 class ArchiveDetailScreen extends StatefulWidget {
   final ColorBoard colorBoard;
+  final Locale locale;
   final DateTime huntingDate;
   final String? memo;
   final VoidCallback? onDelete;
@@ -20,6 +22,7 @@ class ArchiveDetailScreen extends StatefulWidget {
   const ArchiveDetailScreen({
     super.key,
     required this.colorBoard,
+    required this.locale,
     required this.huntingDate,
     this.memo,
     this.onDelete,
@@ -32,47 +35,52 @@ class ArchiveDetailScreen extends StatefulWidget {
 
 class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
   final GlobalKey _cardKey = GlobalKey();
+  late final AppLocalizations _l10n = lookupAppLocalizations(widget.locale);
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // 상단바
-            _buildAppBar(context),
+    return Localizations.override(
+      context: context,
+      locale: widget.locale,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // 상단바
+              _buildAppBar(context),
 
-            // 스크롤 가능한 메인 콘텐츠
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 16),
+              // 스크롤 가능한 메인 콘텐츠
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 16),
 
-                    // 메인 콜라주 (카드 전체 캡처를 위한 RepaintBoundary)
-                    RepaintBoundary(
-                      key: _cardKey,
-                      child: _buildCollageGrid(context),
-                    ),
+                      // 메인 콜라주 (카드 전체 캡처를 위한 RepaintBoundary)
+                      RepaintBoundary(
+                        key: _cardKey,
+                        child: _buildCollageGrid(context),
+                      ),
 
-                    // 메모 섹션 (메모가 있을 때만 표시)
-                    if (widget.memo != null && widget.memo!.isNotEmpty) ...[
+                      // 메모 섹션 (메모가 있을 때만 표시)
+                      if (widget.memo != null && widget.memo!.isNotEmpty) ...[
+                        const SizedBox(height: 32),
+                        _buildMemoSection(context),
+                      ],
+
                       const SizedBox(height: 32),
-                      _buildMemoSection(),
                     ],
-
-                    const SizedBox(height: 32),
-                  ],
+                  ),
                 ),
               ),
-            ),
 
-            // 하단 버튼 영역
-            _buildBottomActions(context),
-          ],
+              // 하단 버튼 영역
+              _buildBottomActions(context),
+            ],
+          ),
         ),
       ),
     );
@@ -226,14 +234,14 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
     );
   }
 
-  Widget _buildMemoSection() {
+  Widget _buildMemoSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 타이틀
-        const Text(
-          '오늘의 기록',
-          style: TextStyle(
+        Text(
+          _l10n.memoTitle,
+          style: const TextStyle(
             fontFamily: 'Pretendard',
             fontWeight: FontWeight.w700,
             fontSize: 16,
@@ -320,9 +328,9 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
                 size: 18,
                 color: Color(0xFF333333),
               ),
-              label: const Text(
-                '콜라주',
-                style: TextStyle(
+              label: Text(
+                _l10n.downloadCollageLabel,
+                style: const TextStyle(
                   fontFamily: 'Pretendard',
                   fontWeight: FontWeight.w500,
                   fontSize: 15,
@@ -354,9 +362,9 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
                 size: 18,
                 color: Color(0xFF333333),
               ),
-              label: const Text(
-                '카드',
-                style: TextStyle(
+              label: Text(
+                _l10n.downloadCardLabel,
+                style: const TextStyle(
                   fontFamily: 'Pretendard',
                   fontWeight: FontWeight.w500,
                   fontSize: 15,

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'l10n/app_localizations.dart';
 import 'main.dart'; // Import ColorBoard class
 import 'archive_detail_screen.dart';
 
 class ArchiveTab extends StatelessWidget {
   final List<ColorBoard> savedColorBoards;
+  final Locale currentLocale;
   final Function(ColorBoard) onSaveImagesToGallery; // New callback
   final Function(ColorBoard) onDeleteColorBoard; // Delete callback
   final VoidCallback? onNavigateToTarget; // New callback for navigation
@@ -11,6 +13,7 @@ class ArchiveTab extends StatelessWidget {
   const ArchiveTab({
     super.key,
     required this.savedColorBoards,
+    required this.currentLocale,
     required this.onSaveImagesToGallery,
     required this.onDeleteColorBoard,
     this.onNavigateToTarget,
@@ -18,11 +21,12 @@ class ArchiveTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 가장 최근에 추가된 순서대로 정렬 (completedDate 기준 내림차순)
+    final l10n = lookupAppLocalizations(currentLocale);
+    // 종료일 기준 최신순 정렬 (없으면 생성일로 fallback)
     final sortedBoards = List<ColorBoard>.from(savedColorBoards)
       ..sort((a, b) {
-        final dateA = a.completedDate ?? DateTime(1970);
-        final dateB = b.completedDate ?? DateTime(1970);
+        final dateA = a.completedDate ?? a.createdDate ?? DateTime(1970);
+        final dateB = b.completedDate ?? b.createdDate ?? DateTime(1970);
         return dateB.compareTo(dateA); // 내림차순 (최신순)
       });
 
@@ -52,9 +56,9 @@ class ArchiveTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 32),
                   // Main message
-                  const Text(
-                    '아직 수집된 컬러가 없네요',
-                    style: TextStyle(
+                  Text(
+                    l10n.archiveEmptyTitle,
+                    style: const TextStyle(
                       fontFamily: 'Pretendard',
                       fontWeight: FontWeight.w700,
                       fontSize: 18,
@@ -64,9 +68,9 @@ class ArchiveTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   // Subtitle
-                  const Text(
-                    '오늘의 색을 찾아 일상을 기록해보세요',
-                    style: TextStyle(
+                  Text(
+                    l10n.archiveEmptySubtitle,
+                    style: const TextStyle(
                       fontFamily: 'Pretendard',
                       fontWeight: FontWeight.w300,
                       fontSize: 14,
@@ -92,9 +96,9 @@ class ArchiveTab extends StatelessWidget {
                         vertical: 14,
                       ),
                     ),
-                    child: const Text(
-                      '사냥 시작하기',
-                      style: TextStyle(
+                    child: Text(
+                      l10n.archiveStartHunting,
+                      style: const TextStyle(
                         fontFamily: 'Pretendard',
                         fontWeight: FontWeight.w500,
                         fontSize: 15,
@@ -108,21 +112,6 @@ class ArchiveTab extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 상단 헤더
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-                  child: Text(
-                    '나의 컬렉션',
-                    style: const TextStyle(
-                      fontFamily: 'Pretendard',
-                      fontWeight: FontWeight.w700,
-                      fontSize: 24,
-                      color: Color(0xFF333333),
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ),
-                // 리스트
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(
@@ -134,9 +123,30 @@ class ArchiveTab extends StatelessWidget {
                       final colorBoard = sortedBoards[index];
                       final hexColor =
                           '#${colorBoard.targetColor.value.toRadixString(16).substring(2).toUpperCase()}';
-                      final dateString = colorBoard.completedDate != null
-                          ? '${colorBoard.completedDate!.year}. ${colorBoard.completedDate!.month.toString().padLeft(2, '0')}. ${colorBoard.completedDate!.day.toString().padLeft(2, '0')}'
-                          : '';
+
+                      // Format date range
+                      String dateString = '';
+                      if (colorBoard.createdDate != null &&
+                          colorBoard.completedDate != null) {
+                        final startDate = colorBoard.createdDate!;
+                        final endDate = colorBoard.completedDate!;
+
+                        // Check if same day
+                        if (startDate.year == endDate.year &&
+                            startDate.month == endDate.month &&
+                            startDate.day == endDate.day) {
+                          // Same day - show only once
+                          dateString =
+                              '${startDate.year}. ${startDate.month.toString().padLeft(2, '0')}. ${startDate.day.toString().padLeft(2, '0')}';
+                        } else {
+                          // Different days - show range
+                          dateString =
+                              '${startDate.year}. ${startDate.month.toString().padLeft(2, '0')}. ${startDate.day.toString().padLeft(2, '0')} ~ ${endDate.year}. ${endDate.month.toString().padLeft(2, '0')}. ${endDate.day.toString().padLeft(2, '0')}';
+                        }
+                      } else if (colorBoard.completedDate != null) {
+                        dateString =
+                            '${colorBoard.completedDate!.year}. ${colorBoard.completedDate!.month.toString().padLeft(2, '0')}. ${colorBoard.completedDate!.day.toString().padLeft(2, '0')}';
+                      }
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
@@ -147,6 +157,7 @@ class ArchiveTab extends StatelessWidget {
                               MaterialPageRoute(
                                 builder: (context) => ArchiveDetailScreen(
                                   colorBoard: colorBoard,
+                                  locale: currentLocale,
                                   huntingDate:
                                       colorBoard.completedDate ??
                                       DateTime.now(),
@@ -175,7 +186,7 @@ class ArchiveTab extends StatelessWidget {
                             child: IntrinsicHeight(
                               child: Row(
                                 children: [
-                                  // 왼쪽 절반 - 색상 영역
+                                  // 왼쪽 1/3 - 색상 영역
                                   Expanded(
                                     flex: 1,
                                     child: Container(
@@ -189,17 +200,19 @@ class ArchiveTab extends StatelessWidget {
                                     ),
                                   ),
 
-                                  // 오른쪽 절반 - 텍스트 영역 (오른쪽 정렬)
+                                  // 오른쪽 2/3 - 텍스트 영역 (왼쪽 정렬)
                                   Expanded(
-                                    flex: 1,
+                                    flex: 2,
                                     child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 16,
-                                        horizontal: 20,
+                                      padding: const EdgeInsets.only(
+                                        left: 16,
+                                        top: 16,
+                                        bottom: 16,
+                                        right: 16,
                                       ),
                                       child: Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.end,
+                                            CrossAxisAlignment.start,
                                         mainAxisAlignment:
                                             MainAxisAlignment.center,
                                         children: [
