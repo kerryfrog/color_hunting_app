@@ -85,13 +85,25 @@ enum ImageSelectionType { camera, gallerySingle, galleryMultiple }
 class ColorBoard {
   final Color targetColor;
   final List<String?> gridImagePaths; // Store paths for serialization
+  final String? memo; // User's note about this hunting session
+  final DateTime? createdDate; // When hunting started
+  final DateTime? completedDate; // When hunting was completed
 
-  ColorBoard({required this.targetColor, required this.gridImagePaths});
+  ColorBoard({
+    required this.targetColor,
+    required this.gridImagePaths,
+    this.memo,
+    this.createdDate,
+    this.completedDate,
+  });
 
   // Convert ColorBoard to JSON
   Map<String, dynamic> toJson() => {
     'targetColor': targetColor.value, // Store color as int
     'gridImagePaths': gridImagePaths,
+    'memo': memo,
+    'createdDate': createdDate?.toIso8601String(),
+    'completedDate': completedDate?.toIso8601String(),
   };
 
   // Create ColorBoard from JSON
@@ -99,6 +111,13 @@ class ColorBoard {
     return ColorBoard(
       targetColor: Color(json['targetColor']),
       gridImagePaths: List<String?>.from(json['gridImagePaths']),
+      memo: json['memo'],
+      createdDate: json['createdDate'] != null
+          ? DateTime.parse(json['createdDate'])
+          : null,
+      completedDate: json['completedDate'] != null
+          ? DateTime.parse(json['completedDate'])
+          : null,
     );
   }
 }
@@ -110,11 +129,13 @@ class _RootScreenState extends State<RootScreen> {
   List<ImageProvider?> _gridImages = List.filled(12, null);
   final ImagePicker _picker = ImagePicker();
   List<ColorBoard> _savedColorBoards = []; // Will be loaded from prefs
+  DateTime? _huntingStartDate; // Track when hunting started
 
   static const String _kSavedColorBoardsKey = 'savedColorBoards';
   static const String _kCurrentHuntingGridKey = 'currentHuntingGridImagePaths';
   static const String _kTargetColorKey = 'targetColor';
   static const String _kIsHuntingActiveKey = 'isHuntingActive';
+  static const String _kHuntingStartDateKey = 'huntingStartDate';
 
   @override
   void initState() {
@@ -136,6 +157,7 @@ class _RootScreenState extends State<RootScreen> {
       targetColor: _targetColor,
       gridImages: _gridImages,
       onTakePicture: _pickImageForGridCell,
+      onRemoveImage: _removeImageFromGridCell,
       onInitializeSession: _resetHuntingSession,
       onSaveSession: _saveHuntingSession,
       onPickMultipleImages: _pickMultipleImages,
@@ -144,6 +166,7 @@ class _RootScreenState extends State<RootScreen> {
     ArchiveTab(
       savedColorBoards: _savedColorBoards,
       onSaveImagesToGallery: _saveColorBoardImagesToGallery,
+      onDeleteColorBoard: _deleteColorBoard,
       onNavigateToTarget: () {
         setState(() {
           _selectedIndex = 0; // Navigate to Target tab
@@ -176,6 +199,10 @@ class _RootScreenState extends State<RootScreen> {
     final int? savedTargetColorValue = prefs.getInt(_kTargetColorKey);
     final bool savedIsHuntingActive =
         prefs.getBool(_kIsHuntingActiveKey) ?? false;
+    final String? savedStartDateString = prefs.getString(_kHuntingStartDateKey);
+    final DateTime? savedStartDate = savedStartDateString != null
+        ? DateTime.parse(savedStartDateString)
+        : null;
 
     // Load current hunting grid images
     final List<String>? currentGridImagePaths = prefs.getStringList(
@@ -194,6 +221,7 @@ class _RootScreenState extends State<RootScreen> {
       setState(() {
         _gridImages = loadedImages;
         _isHuntingActive = savedIsHuntingActive && hasImages;
+        _huntingStartDate = savedStartDate;
         _targetColor = savedTargetColorValue != null
             ? Color(savedTargetColorValue)
             : Colors.transparent;
@@ -204,6 +232,7 @@ class _RootScreenState extends State<RootScreen> {
         _isHuntingActive = false;
         _gridImages = List.filled(12, null);
         _targetColor = Colors.transparent;
+        _huntingStartDate = null;
       });
     }
   }
@@ -231,6 +260,14 @@ class _RootScreenState extends State<RootScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kTargetColorKey, _targetColor.value);
     await prefs.setBool(_kIsHuntingActiveKey, _isHuntingActive);
+    if (_huntingStartDate != null) {
+      await prefs.setString(
+        _kHuntingStartDateKey,
+        _huntingStartDate!.toIso8601String(),
+      );
+    } else {
+      await prefs.remove(_kHuntingStartDateKey);
+    }
     await _saveHuntingGridImages();
   }
 
@@ -264,25 +301,19 @@ class _RootScreenState extends State<RootScreen> {
     const int numColumns = 3;
     const int numRows = 4;
     const int imageSize = 300; // Size of each individual image in the collage
-    const int padding = 10; // Padding between images
+    const int padding = 3; // Slight padding between images
 
-    final int collageWidth = (imageSize + padding) * numColumns - padding;
-    final int collageHeight = (imageSize + padding) * numRows - padding;
+    final int collageWidth =
+        (imageSize * numColumns) + (padding * (numColumns - 1));
+    final int collageHeight = (imageSize * numRows) + (padding * (numRows - 1));
 
-    // Create a new image for the collage with the target color as background
+    // Create a new image for the collage with white background
     final img.Image collage = img.Image(
       width: collageWidth,
       height: collageHeight,
     );
-    // Fill the background with the target color
-    img.fill(
-      collage,
-      color: img.ColorRgb8(
-        targetColor.red,
-        targetColor.green,
-        targetColor.blue,
-      ),
-    );
+    // Fill the background with white
+    img.fill(collage, color: img.ColorRgb8(255, 255, 255));
 
     int currentImageIndex = 0;
     for (int row = 0; row < numRows; row++) {
@@ -329,7 +360,7 @@ class _RootScreenState extends State<RootScreen> {
     return collageFile;
   }
 
-  void _saveHuntingSession() {
+  void _saveHuntingSession() async {
     if (_gridImages.any((image) => image == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -339,6 +370,9 @@ class _RootScreenState extends State<RootScreen> {
       return;
     }
 
+    // Show memo input dialog
+    final String? memo = await _showMemoDialog();
+
     // Convert ImageProvider to file paths for serialization
     final List<String?> imagePaths = _gridImages.map((imageProvider) {
       if (imageProvider is FileImage) {
@@ -347,13 +381,22 @@ class _RootScreenState extends State<RootScreen> {
       return null;
     }).toList();
 
+    final completedDate = DateTime.now();
+
     setState(() {
       _savedColorBoards.add(
-        ColorBoard(targetColor: _targetColor, gridImagePaths: imagePaths),
+        ColorBoard(
+          targetColor: _targetColor,
+          gridImagePaths: imagePaths,
+          memo: memo,
+          createdDate: _huntingStartDate,
+          completedDate: completedDate,
+        ),
       );
       _isHuntingActive = false;
       _targetColor = Colors.transparent;
       _gridImages = List.filled(12, null);
+      _huntingStartDate = null;
       _selectedIndex = 2;
     });
     _saveColorBoards(); // Persist the updated list
@@ -394,6 +437,124 @@ class _RootScreenState extends State<RootScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('콜라주 이미지 저장 실패: $e')));
     }
+  }
+
+  Future<void> _deleteColorBoard(ColorBoard colorBoard) async {
+    setState(() {
+      _savedColorBoards.remove(colorBoard);
+    });
+    await _saveColorBoards();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          '컬렉션이 삭제되었습니다',
+          style: TextStyle(
+            fontFamily: 'Pretendard',
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<String?> _showMemoDialog() async {
+    final TextEditingController memoController = TextEditingController();
+
+    return showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            '오늘의 기록',
+            style: TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w700,
+              fontSize: 20,
+              color: Color(0xFF333333),
+            ),
+          ),
+          content: TextField(
+            controller: memoController,
+            maxLines: 5,
+            maxLength: 200,
+            decoration: InputDecoration(
+              hintText: '이날의 특별한 순간들을 기록해보세요.',
+              hintStyle: const TextStyle(
+                fontFamily: 'Pretendard',
+                fontWeight: FontWeight.w300,
+                fontSize: 14,
+                color: Color(0xFF999999),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF333333)),
+              ),
+              contentPadding: const EdgeInsets.all(16),
+            ),
+            style: const TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w400,
+              fontSize: 14,
+              color: Color(0xFF333333),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text(
+                '건너뛰기',
+                style: TextStyle(
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                  color: Color(0xFF888888),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  memoController.text.trim().isEmpty
+                      ? null
+                      : memoController.text.trim(),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF333333),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+              ),
+              child: const Text(
+                '저장',
+                style: TextStyle(
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _updateTargetColor(Color newColor) async {
@@ -473,6 +634,7 @@ class _RootScreenState extends State<RootScreen> {
   void _startHunting() {
     setState(() {
       _isHuntingActive = true;
+      _huntingStartDate = DateTime.now(); // Record start date
       _selectedIndex = 1;
     });
     _saveHuntingState();
@@ -542,7 +704,7 @@ class _RootScreenState extends State<RootScreen> {
         context,
         MaterialPageRoute(
           builder: (context) =>
-              CameraScreen(camera: cameras.first, targetColor: _targetColor),
+              CameraScreen(cameras: cameras, targetColor: _targetColor),
         ),
       );
     } else if (selectionType == ImageSelectionType.gallerySingle) {
@@ -566,6 +728,27 @@ class _RootScreenState extends State<RootScreen> {
         ).showSnackBar(const SnackBar(content: Text('Failed to save image')));
       }
     }
+  }
+
+  void _removeImageFromGridCell(int index) {
+    setState(() {
+      _gridImages[index] = null;
+    });
+    _saveHuntingState(); // Persist the updated grid state
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          '이미지가 제거되었습니다',
+          style: TextStyle(
+            fontFamily: 'Pretendard',
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 1),
+      ),
+    );
   }
 
   Future<void> _pickMultipleImages() async {

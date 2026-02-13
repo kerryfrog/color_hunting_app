@@ -1,24 +1,34 @@
 import 'package:flutter/material.dart';
-import 'dart:io'; // Add this import
 import 'main.dart'; // Import ColorBoard class
+import 'archive_detail_screen.dart';
 
 class ArchiveTab extends StatelessWidget {
   final List<ColorBoard> savedColorBoards;
   final Function(ColorBoard) onSaveImagesToGallery; // New callback
+  final Function(ColorBoard) onDeleteColorBoard; // Delete callback
   final VoidCallback? onNavigateToTarget; // New callback for navigation
 
   const ArchiveTab({
     super.key,
     required this.savedColorBoards,
     required this.onSaveImagesToGallery,
+    required this.onDeleteColorBoard,
     this.onNavigateToTarget,
   });
 
   @override
   Widget build(BuildContext context) {
+    // 가장 최근에 추가된 순서대로 정렬 (completedDate 기준 내림차순)
+    final sortedBoards = List<ColorBoard>.from(savedColorBoards)
+      ..sort((a, b) {
+        final dateA = a.completedDate ?? DateTime(1970);
+        final dateB = b.completedDate ?? DateTime(1970);
+        return dateB.compareTo(dateA); // 내림차순 (최신순)
+      });
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFFFF), // Pure white background
-      body: savedColorBoards.isEmpty
+      backgroundColor: const Color(0xFFF8F9FA), // 아주 연한 회색 배경
+      body: sortedBoards.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -95,102 +105,141 @@ class ArchiveTab extends StatelessWidget {
                 ],
               ),
             )
-          : GridView.builder(
-              padding: const EdgeInsets.all(8.0),
-              itemCount: savedColorBoards.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2, // Display 2 boards per row
-                childAspectRatio: 0.8, // Adjust as needed for aspect ratio
-                crossAxisSpacing: 8.0,
-                mainAxisSpacing: 8.0,
-              ),
-              itemBuilder: (context, index) {
-                final colorBoard = savedColorBoards[index];
-                return GestureDetector(
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      builder: (BuildContext context) {
-                        return SafeArea(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              ListTile(
-                                leading: const Icon(Icons.download),
-                                title: const Text('갤러리에 저장'),
-                                onTap: () {
-                                  Navigator.pop(
-                                    context,
-                                  ); // Close the bottom sheet
-                                  onSaveImagesToGallery(colorBoard);
-                                },
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  },
-                  child: Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.0),
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 상단 헤더
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+                  child: Text(
+                    '나의 컬렉션',
+                    style: const TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 24,
+                      color: Color(0xFF333333),
+                      letterSpacing: -0.5,
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      children: [
-                        // Target Color Display
-                        Container(
-                          height: 40,
-                          color: colorBoard.targetColor,
-                          child: Center(
-                            child: Text(
-                              '#${colorBoard.targetColor.value.toRadixString(16).substring(2).toUpperCase()}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                  ),
+                ),
+                // 리스트
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    itemCount: sortedBoards.length,
+                    itemBuilder: (context, index) {
+                      final colorBoard = sortedBoards[index];
+                      final hexColor =
+                          '#${colorBoard.targetColor.value.toRadixString(16).substring(2).toUpperCase()}';
+                      final dateString = colorBoard.completedDate != null
+                          ? '${colorBoard.completedDate!.year}. ${colorBoard.completedDate!.month.toString().padLeft(2, '0')}. ${colorBoard.completedDate!.day.toString().padLeft(2, '0')}'
+                          : '';
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ArchiveDetailScreen(
+                                  colorBoard: colorBoard,
+                                  huntingDate:
+                                      colorBoard.completedDate ??
+                                      DateTime.now(),
+                                  memo: colorBoard.memo,
+                                  onDelete: () =>
+                                      onDeleteColorBoard(colorBoard),
+                                  onSaveCollage: () =>
+                                      onSaveImagesToGallery(colorBoard),
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFFFFF), // 완전한 화이트
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.04),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                  spreadRadius: 0,
+                                ),
+                              ],
+                            ),
+                            child: IntrinsicHeight(
+                              child: Row(
+                                children: [
+                                  // 왼쪽 절반 - 색상 영역
+                                  Expanded(
+                                    flex: 1,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: colorBoard.targetColor,
+                                        borderRadius: const BorderRadius.only(
+                                          topLeft: Radius.circular(12),
+                                          bottomLeft: Radius.circular(12),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                  // 오른쪽 절반 - 텍스트 영역 (오른쪽 정렬)
+                                  Expanded(
+                                    flex: 1,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 16,
+                                        horizontal: 20,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          // 날짜 (Primary)
+                                          Text(
+                                            dateString,
+                                            style: const TextStyle(
+                                              fontFamily: 'Pretendard',
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 16,
+                                              color: Color(0xFF333333),
+                                              letterSpacing: -0.3,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          // HEX 코드 (Secondary)
+                                          Text(
+                                            hexColor,
+                                            style: const TextStyle(
+                                              fontFamily: 'Pretendard',
+                                              fontWeight: FontWeight.w300,
+                                              fontSize: 12,
+                                              color: Color(0xFF999999),
+                                              letterSpacing: 0.2,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ),
-                        // Image Grid Preview
-                        Expanded(
-                          child: GridView.builder(
-                            physics:
-                                const NeverScrollableScrollPhysics(), // Disable scrolling of inner grid
-                            shrinkWrap: true,
-                            itemCount: colorBoard.gridImagePaths.length,
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3,
-                                  childAspectRatio: 1.0,
-                                  crossAxisSpacing: 2.0,
-                                  mainAxisSpacing: 2.0,
-                                ),
-                            itemBuilder: (context, imgIndex) {
-                              final imagePath =
-                                  colorBoard.gridImagePaths[imgIndex];
-                              return Container(
-                                decoration: BoxDecoration(
-                                  color: imagePath == null
-                                      ? Colors.grey.withOpacity(0.2)
-                                      : null,
-                                  image: imagePath != null
-                                      ? DecorationImage(
-                                          image: FileImage(File(imagePath)),
-                                          fit: BoxFit.cover,
-                                        )
-                                      : null,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ],
             ),
     );
   }

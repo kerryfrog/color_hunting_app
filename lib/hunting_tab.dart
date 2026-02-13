@@ -5,6 +5,7 @@ class HuntingTab extends StatelessWidget {
   final Color targetColor;
   final List<ImageProvider?> gridImages;
   final Function(int) onTakePicture;
+  final Function(int) onRemoveImage; // Remove image callback
   final VoidCallback onInitializeSession;
   final VoidCallback onSaveSession;
   final VoidCallback onPickMultipleImages; // New callback
@@ -16,6 +17,7 @@ class HuntingTab extends StatelessWidget {
     required this.targetColor,
     required this.gridImages,
     required this.onTakePicture,
+    required this.onRemoveImage,
     required this.onInitializeSession,
     required this.onSaveSession,
     required this.onPickMultipleImages,
@@ -35,21 +37,34 @@ class HuntingTab extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.palette_outlined,
-                    color: Color(0xFFE0E0E0),
-                    size: 64,
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFF5F5F7).withOpacity(0.3),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        Icons.palette_outlined,
+                        size: 60,
+                        color: const Color(0xFFCCCCCC).withOpacity(0.5),
+                        weight: 0.5,
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 32),
                   const Text(
                     '아직 타겟 컬러가 없어요',
                     style: TextStyle(
                       fontFamily: 'Pretendard',
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
                       fontSize: 18,
+                      color: Color(0xFF333333),
+                      letterSpacing: -0.3,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   const Text(
                     'Target 탭에서 오늘의 색상을 먼저 골라보세요',
                     style: TextStyle(
@@ -57,28 +72,33 @@ class HuntingTab extends StatelessWidget {
                       fontWeight: FontWeight.w300,
                       fontSize: 14,
                       color: Color(0xFF888888),
+                      letterSpacing: -0.2,
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 48),
                   OutlinedButton(
                     onPressed: onNavigateToTarget,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF333333),
-                      side: const BorderSide(color: Color(0xFF333333)),
+                      side: const BorderSide(
+                        color: Color(0xFF333333),
+                        width: 1,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
                       ),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 32,
-                        vertical: 12,
+                        vertical: 14,
                       ),
                     ),
                     child: const Text(
                       '타겟 컬러 정하기',
                       style: TextStyle(
                         fontFamily: 'Pretendard',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 15,
+                        letterSpacing: -0.2,
                       ),
                     ),
                   ),
@@ -109,7 +129,13 @@ class HuntingTab extends StatelessWidget {
                 ),
                 itemBuilder: (context, index) {
                   return GestureDetector(
-                    onTap: () => onTakePicture(index),
+                    onTap: () {
+                      if (gridImages[index] != null) {
+                        _showImageOptions(context, index);
+                      } else {
+                        onTakePicture(index);
+                      }
+                    },
                     child: Container(
                       decoration: BoxDecoration(
                         color: gridImages[index] == null
@@ -224,6 +250,74 @@ class HuntingTab extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  void _showImageOptions(BuildContext context, int index) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE0E0E0),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: Color(0xFFE53935),
+                ),
+                title: const Text(
+                  '이미지 제거',
+                  style: TextStyle(
+                    fontFamily: 'Pretendard',
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                    color: Color(0xFFE53935),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  onRemoveImage(index);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.camera_alt_outlined,
+                  color: Color(0xFF333333),
+                ),
+                title: const Text(
+                  '다른 사진 찍기',
+                  style: TextStyle(
+                    fontFamily: 'Pretendard',
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                    color: Color(0xFF333333),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  onTakePicture(index);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
     );
   }
 }

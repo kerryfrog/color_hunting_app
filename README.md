@@ -1,6 +1,6 @@
 application 명세서 
 
-Color Hunting App (Flutter)
+Color Hunting (Flutter)
 1. 변경된 핵심 인터랙션: 수동 컬러 지정 (Manual Start)
 시작 버튼: 홈 화면 중앙에 "오늘의 컬러 찾기 시작" 또는 "새로운 컬러 사냥" 버튼 배치.
 
