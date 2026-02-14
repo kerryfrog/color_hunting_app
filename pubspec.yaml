@@ -45,6 +45,7 @@ dependencies:
   intl: ^0.20.2 # For date formatting
   flutter_svg: ^2.0.9 # For SVG images
   share_plus: ^7.2.1 # For sharing functionality
+  google_mobile_ads: ^7.0.0
 
 dev_dependencies:
   flutter_test:

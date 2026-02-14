@@ -1,4 +1,4 @@
-package com.example.color_hunting_app
+package com.kerryfrog.colorhuntingapp
 
 import io.flutter.embedding.android.FlutterActivity
 

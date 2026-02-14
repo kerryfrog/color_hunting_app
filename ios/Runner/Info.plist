@@ -49,5 +49,7 @@
 	<string>이 앱은 여러분의 컬러 보드 이미지를 갤러리에 저장하기 위해 사진 라이브러리에 접근해야 합니다.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>이 앱은 여러분의 컬러 보드 이미지를 갤러리에 저장하기 위해 사진 라이브러리에 접근해야 합니다.</string>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
 </dict>
 </plist>

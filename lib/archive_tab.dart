@@ -19,6 +19,32 @@ class ArchiveTab extends StatelessWidget {
     this.onNavigateToTarget,
   });
 
+  // 배경색과 대비되는 텍스트 색상 자동 선택
+  Color _getContrastingTextColor(Color backgroundColor) {
+    // Calculate relative luminance
+    final luminance = backgroundColor.computeLuminance();
+    // Return white for dark colors, black for light colors
+    return luminance > 0.5 ? Colors.black : Colors.white;
+  }
+
+  // 수집된 사진 개수를 기반으로 블록 높이 계산
+  double _getBlockHeight(ColorBoard board) {
+    final photoCount = board.gridImagePaths
+        .where((path) => path != null)
+        .length;
+
+    // 사진이 많을수록 더 큰 블록
+    if (photoCount >= 10) return 240.0;
+    if (photoCount >= 7) return 200.0;
+    if (photoCount >= 4) return 160.0;
+    return 140.0;
+  }
+
+  // RGB 값 추출
+  String _getRgbString(Color color) {
+    return 'RGB ${color.red}, ${color.green}, ${color.blue}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = lookupAppLocalizations(currentLocale);
@@ -31,7 +57,7 @@ class ArchiveTab extends StatelessWidget {
       });
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // 아주 연한 회색 배경
+      backgroundColor: Colors.white, // 순백 배경으로 컬러칩 강조
       body: sortedBoards.isEmpty
           ? Center(
               child: Column(
@@ -109,150 +135,142 @@ class ArchiveTab extends StatelessWidget {
                 ],
               ),
             )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 8,
-                    ),
-                    itemCount: sortedBoards.length,
-                    itemBuilder: (context, index) {
-                      final colorBoard = sortedBoards[index];
-                      final hexColor =
-                          '#${colorBoard.targetColor.value.toRadixString(16).substring(2).toUpperCase()}';
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                final columnWidth = (width - 1) / 2; // 1px gap
 
-                      // Format date range
-                      String dateString = '';
-                      if (colorBoard.createdDate != null &&
-                          colorBoard.completedDate != null) {
-                        final startDate = colorBoard.createdDate!;
-                        final endDate = colorBoard.completedDate!;
+                // 2개 컬럼으로 분리
+                final leftColumn = <Widget>[];
+                final rightColumn = <Widget>[];
 
-                        // Check if same day
-                        if (startDate.year == endDate.year &&
-                            startDate.month == endDate.month &&
-                            startDate.day == endDate.day) {
-                          // Same day - show only once
-                          dateString =
-                              '${startDate.year}. ${startDate.month.toString().padLeft(2, '0')}. ${startDate.day.toString().padLeft(2, '0')}';
-                        } else {
-                          // Different days - show range
-                          dateString =
-                              '${startDate.year}. ${startDate.month.toString().padLeft(2, '0')}. ${startDate.day.toString().padLeft(2, '0')} ~ ${endDate.year}. ${endDate.month.toString().padLeft(2, '0')}. ${endDate.day.toString().padLeft(2, '0')}';
-                        }
-                      } else if (colorBoard.completedDate != null) {
-                        dateString =
-                            '${colorBoard.completedDate!.year}. ${colorBoard.completedDate!.month.toString().padLeft(2, '0')}. ${colorBoard.completedDate!.day.toString().padLeft(2, '0')}';
-                      }
+                for (int i = 0; i < sortedBoards.length; i++) {
+                  final colorBoard = sortedBoards[i];
+                  final hexColor =
+                      '#${colorBoard.targetColor.value.toRadixString(16).substring(2).toUpperCase()}';
+                  final rgbColor = _getRgbString(colorBoard.targetColor);
+                  final textColor = _getContrastingTextColor(
+                    colorBoard.targetColor,
+                  );
 
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ArchiveDetailScreen(
-                                  colorBoard: colorBoard,
-                                  locale: currentLocale,
-                                  huntingDate:
-                                      colorBoard.completedDate ??
-                                      DateTime.now(),
-                                  memo: colorBoard.memo,
-                                  onDelete: () =>
-                                      onDeleteColorBoard(colorBoard),
-                                  onSaveCollage: () =>
-                                      onSaveImagesToGallery(colorBoard),
-                                ),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFFFFF), // 완전한 화이트
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.04),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                  spreadRadius: 0,
-                                ),
-                              ],
-                            ),
-                            child: IntrinsicHeight(
-                              child: Row(
-                                children: [
-                                  // 왼쪽 1/3 - 색상 영역
-                                  Expanded(
-                                    flex: 1,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: colorBoard.targetColor,
-                                        borderRadius: const BorderRadius.only(
-                                          topLeft: Radius.circular(12),
-                                          bottomLeft: Radius.circular(12),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                  // 사진 개수 계산
+                  final photoCount = colorBoard.gridImagePaths
+                      .where((path) => path != null)
+                      .length;
 
-                                  // 오른쪽 2/3 - 텍스트 영역 (왼쪽 정렬)
-                                  Expanded(
-                                    flex: 2,
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(
-                                        left: 16,
-                                        top: 16,
-                                        bottom: 16,
-                                        right: 16,
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          // 날짜 (Primary)
-                                          Text(
-                                            dateString,
-                                            style: const TextStyle(
-                                              fontFamily: 'Pretendard',
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 16,
-                                              color: Color(0xFF333333),
-                                              letterSpacing: -0.3,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          // HEX 코드 (Secondary)
-                                          Text(
-                                            hexColor,
-                                            style: const TextStyle(
-                                              fontFamily: 'Pretendard',
-                                              fontWeight: FontWeight.w300,
-                                              fontSize: 12,
-                                              color: Color(0xFF999999),
-                                              letterSpacing: 0.2,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                  // 블록 높이 (세로로 긴 직사각형)
+                  final blockHeight = columnWidth * 1.4;
+
+                  // 날짜 포맷팅
+                  String dateString = '';
+                  if (colorBoard.completedDate != null) {
+                    final date = colorBoard.completedDate!;
+                    dateString =
+                        '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
+                  }
+
+                  final colorBlock = GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ArchiveDetailScreen(
+                            colorBoard: colorBoard,
+                            locale: currentLocale,
+                            huntingDate:
+                                colorBoard.completedDate ?? DateTime.now(),
+                            memo: colorBoard.memo,
+                            onDelete: () => onDeleteColorBoard(colorBoard),
+                            onSaveCollage: () =>
+                                onSaveImagesToGallery(colorBoard),
                           ),
                         ),
                       );
                     },
+                    child: Container(
+                      width: columnWidth,
+                      height: blockHeight,
+                      decoration: BoxDecoration(
+                        color: colorBoard.targetColor, // 타겟 컬러 100% 농도
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // 상단: 날짜 (색상 이름 역할)
+                            if (dateString.isNotEmpty)
+                              Text(
+                                dateString,
+                                style: TextStyle(
+                                  fontFamily: 'Pretendard',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 20,
+                                  color: textColor,
+                                  letterSpacing: -0.5,
+                                  height: 1.2,
+                                ),
+                              ),
+
+                            // 하단: HEX & RGB
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  hexColor,
+                                  style: TextStyle(
+                                    fontFamily: 'Pretendard',
+                                    fontWeight: FontWeight.w300,
+                                    fontSize: 13,
+                                    color: textColor.withOpacity(0.9),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  rgbColor,
+                                  style: TextStyle(
+                                    fontFamily: 'Pretendard',
+                                    fontWeight: FontWeight.w300,
+                                    fontSize: 11,
+                                    color: textColor.withOpacity(0.7),
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+
+                  // 교대로 왼쪽/오른쪽 컬럼에 배치
+                  if (i % 2 == 0) {
+                    leftColumn.add(colorBlock);
+                    if (i < sortedBoards.length - 1) {
+                      leftColumn.add(const SizedBox(height: 1));
+                    }
+                  } else {
+                    rightColumn.add(colorBlock);
+                    if (i < sortedBoards.length - 1) {
+                      rightColumn.add(const SizedBox(height: 1));
+                    }
+                  }
+                }
+
+                return SingleChildScrollView(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: Column(children: leftColumn)),
+                      const SizedBox(width: 1),
+                      Expanded(child: Column(children: rightColumn)),
+                    ],
                   ),
-                ),
-              ],
+                );
+              },
             ),
     );
   }

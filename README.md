@@ -1,34 +1,69 @@
-application 명세서 
+# Color Hunting App
 
-Color Hunting (Flutter)
-1. 변경된 핵심 인터랙션: 수동 컬러 지정 (Manual Start)
-시작 버튼: 홈 화면 중앙에 "오늘의 컬러 찾기 시작" 또는 "새로운 컬러 사냥" 버튼 배치.
+Flutter로 만든 컬러 헌팅 앱입니다.
 
-동작: 버튼을 누르면 랜덤하게 색상이 결정되거나, 색상 휠에서 선택하는 인터페이스가 나타남.
+## 1. 개발 환경 준비
 
-상태 유지: 한 번 시작하면 12개의 그리드를 다 채울 때까지 해당 컬러 세션이 유지됨. (도중에 포기하고 새로 시작할 수 있는 '리셋' 기능 포함)
+### 필수
+- Flutter SDK 설치
+- Xcode (iOS 빌드 시, macOS)
+- Android Studio + Android SDK (Android 빌드 시)
 
-2. 주요 화면 구성 (Flutter 구조 반영)
-A. 대기 화면 (Ready State)
+### 권장 확인
+```bash
+flutter doctor
+```
 
-UI: 비어 있는 3x4 그리드가 배경에 흐릿하게 보이고, 중앙에 "Start Color Hunting" 대형 플로팅 버튼 배치.
+## 2. 프로젝트 실행
 
-설명: 사냥을 시작하기 전의 정적인 상태.
+```bash
+flutter pub get
+flutter run
+```
 
-B. 사냥 중 화면 (Active State)
+## 3. 로컬라이제이션(gen-l10n)
 
-상단(AppBar): 현재 타겟 컬러를 보여주는 색상 띠와 컬러 코드(HEX) 표시.
+이 프로젝트는 `flutter: generate: true` 설정을 사용합니다.  
+번역 수정은 `lib/l10n/app_*.arb` 파일에서 하고, 생성 파일(`app_localizations_*.dart`)은 직접 수정하지 않습니다.
 
-중앙(Body): GridView.builder를 이용한 3x4 격자.
+```bash
+flutter gen-l10n
+```
 
-각 셀(Container)은 GestureDetector로 감싸 클릭 시 카메라 호출.
+## 4. Android 빌드
 
-사진이 채워진 셀은 이미지 표시, 비어 있는 셀은 타겟 컬러의 20% 투명도 배경색 적용.
+### APK (테스트/배포 전 확인용)
+```bash
+flutter build apk --release
+```
 
-하단: '세션 초기화' 또는 '저장하기' 버튼.
+산출물:
+- `build/app/outputs/flutter-apk/app-release.apk`
 
-C. 카메라 로직 (Camera Integration)
+### AAB (Play Store 업로드용)
+```bash
+flutter build appbundle --release
+```
 
-camera 패키지를 사용하여 앱 내 전용 카메라 UI 구현.
+산출물:
+- `build/app/outputs/bundle/release/app-release.aab`
 
-셔터 버튼 주변에 현재 찾아야 할 색상을 가이드라인으로 표시하여 직관성 제공.
+## 5. iOS 빌드
+
+### iOS release 빌드
+```bash
+flutter build ios --release
+```
+
+참고:
+- 실제 배포용 서명/아카이브는 Xcode에서 `ios/Runner.xcworkspace` 열어 진행
+- TestFlight/App Store 배포 시 Bundle ID, Signing Team, Provisioning Profile 설정 필요
+
+## 6. 자주 쓰는 명령어
+
+```bash
+flutter analyze
+flutter test
+flutter clean
+flutter pub get
+```

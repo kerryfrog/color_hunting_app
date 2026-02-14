@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert'; // For JSON encoding/decoding
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
@@ -10,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image/image.dart' as img; // Import as img to avoid conflicts
 import 'package:path_provider/path_provider.dart'; // Import for temporary directory
 import 'dart:typed_data'; // Import for Uint8List
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'camera_screen.dart';
 import 'target_tab.dart';
@@ -20,6 +22,7 @@ List<CameraDescription> cameras = [];
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await MobileAds.instance.initialize();
 
   try {
     cameras = await availableCameras();
@@ -76,6 +79,16 @@ class MyApp extends StatelessWidget {
           selectedItemColor: Colors.transparent, // Will override in widget
           unselectedItemColor: Color(0xFF2D2D2D),
           elevation: 0,
+          selectedLabelStyle: TextStyle(
+            fontFamily: 'Pretendard',
+            fontWeight: FontWeight.w500,
+            fontSize: 11,
+          ),
+          unselectedLabelStyle: TextStyle(
+            fontFamily: 'Pretendard',
+            fontWeight: FontWeight.w400,
+            fontSize: 11,
+          ),
         ),
       ),
       home: const RootScreen(),
@@ -157,6 +170,8 @@ class _RootScreenState extends State<RootScreen> {
   static const String _kIsHuntingActiveKey = 'isHuntingActive';
   static const String _kHuntingStartDateKey = 'huntingStartDate';
   static const String _kAppLanguageKey = 'appLanguage';
+  static const String _kRewardedAdUnitId =
+      'ca-app-pub-3940256099942544/5224354917';
 
   Locale get _currentLocale => switch (_appLanguage) {
     AppLanguage.ko => const Locale('ko'),
@@ -171,50 +186,6 @@ class _RootScreenState extends State<RootScreen> {
   void initState() {
     super.initState();
     _loadHuntingSession(); // Load both boards and current hunting session on app start
-    _addTestData(); // Add test data for UI testing
-  }
-
-  // Add test data for UI testing
-  Future<void> _addTestData() async {
-    // Only add if no data exists
-    if (_savedColorBoards.isEmpty) {
-      final testBoard1 = ColorBoard(
-        targetColor: const Color(0xFFFF6B6B),
-        gridImagePaths: List.filled(12, ''),
-        memo: '데모용 컬러 헌팅',
-        createdDate: DateTime(2026, 1, 2),
-        completedDate: DateTime(2026, 1, 2),
-      );
-
-      final testBoard2 = ColorBoard(
-        targetColor: const Color(0xFF4ECDC4),
-        gridImagePaths: List.filled(12, ''),
-        memo: '여러 날에 걸친 헌팅',
-        createdDate: DateTime(2026, 1, 5),
-        completedDate: DateTime(2026, 1, 6),
-      );
-
-      final testBoard3 = ColorBoard(
-        targetColor: const Color(0xFFFFA07A),
-        gridImagePaths: List.filled(12, ''),
-        memo: '2월 첫 헌팅',
-        createdDate: DateTime(2026, 2, 1),
-        completedDate: DateTime(2026, 2, 1),
-      );
-
-      setState(() {
-        _savedColorBoards.add(testBoard1);
-        _savedColorBoards.add(testBoard2);
-        _savedColorBoards.add(testBoard3);
-      });
-
-      // Save to preferences
-      final prefs = await SharedPreferences.getInstance();
-      final boardsJson = jsonEncode(
-        _savedColorBoards.map((board) => board.toJson()).toList(),
-      );
-      await prefs.setString(_kSavedColorBoardsKey, boardsJson);
-    }
   }
 
   // Define _widgetOptions here, after methods are defined, or as a getter
@@ -225,6 +196,7 @@ class _RootScreenState extends State<RootScreen> {
       onColorSelected: _updateTargetColor,
       isHuntingActive: _isHuntingActive,
       onStartHunting: _startHunting,
+      onRequestColorPickerAccess: () => _showRewardedAdGate(),
     ),
     HuntingTab(
       isHuntingActive: _isHuntingActive,
@@ -264,15 +236,12 @@ class _RootScreenState extends State<RootScreen> {
       _appLanguage = language;
     });
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _kAppLanguageKey,
-      switch (language) {
-        AppLanguage.ko => 'ko',
-        AppLanguage.en => 'en',
-        AppLanguage.ja => 'ja',
-        AppLanguage.zh => 'zh',
-      },
-    );
+    await prefs.setString(_kAppLanguageKey, switch (language) {
+      AppLanguage.ko => 'ko',
+      AppLanguage.en => 'en',
+      AppLanguage.ja => 'ja',
+      AppLanguage.zh => 'zh',
+    });
 
     if (!mounted) return;
     final l10n = AppLocalizations.of(l10nContext)!;
@@ -372,6 +341,167 @@ class _RootScreenState extends State<RootScreen> {
     );
   }
 
+  Future<bool> _showRewardedAdGate() async {
+    final localeCode = _currentLocale.languageCode;
+    final title = switch (localeCode) {
+      'en' => 'Unlock Color Picker',
+      'ja' => 'カラーピッカーを解除',
+      'zh' => '解锁取色器',
+      _ => '컬러 피커 잠금 해제',
+    };
+    final body = switch (localeCode) {
+      'en' => 'Watch a short ad to use the color picker.',
+      'ja' => 'カラーピッカーを使うには短い広告をご視聴ください。',
+      'zh' => '观看一段短广告后即可使用取色器。',
+      _ => '컬러 피커를 사용하려면 짧은 광고를 시청해주세요.',
+    };
+    final cancelText = switch (localeCode) {
+      'en' => 'Cancel',
+      'ja' => 'キャンセル',
+      'zh' => '取消',
+      _ => '취소',
+    };
+    final watchText = switch (localeCode) {
+      'en' => 'Watch Ad',
+      'ja' => '広告 보기',
+      'zh' => '观看广告',
+      _ => '광고 보기',
+    };
+    final doneText = switch (localeCode) {
+      'en' => 'Ad completed. Color picker unlocked.',
+      'ja' => '広告視聴が完了しました。カラーピッカーが解除されました。',
+      'zh' => '广告播放完成，取色器已解锁。',
+      _ => '광고 시청이 완료되어 컬러 피커가 열렸습니다.',
+    };
+    final failedText = switch (localeCode) {
+      'en' => 'Ad failed to load. Please try again.',
+      'ja' => '広告の読み込みに失敗しました。もう一度お試しください。',
+      'zh' => '广告加载失败，请重试。',
+      _ => '광고를 불러오지 못했습니다. 다시 시도해주세요.',
+    };
+    final notRewardedText = switch (localeCode) {
+      'en' => 'Reward was not granted. Please watch the full ad.',
+      'ja' => '報酬が付与されませんでした。広告を最後までご視聴ください。',
+      'zh' => '未获得奖励，请完整观看广告。',
+      _ => '보상을 받지 못했습니다. 광고를 끝까지 시청해주세요.',
+    };
+
+    final shouldWatch = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+            ),
+          ),
+          content: Text(
+            body,
+            style: const TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w400,
+              fontSize: 14,
+              color: Color(0xFF444444),
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(
+                cancelText,
+                style: const TextStyle(
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF333333),
+                foregroundColor: Colors.white,
+                elevation: 0,
+              ),
+              child: Text(
+                watchText,
+                style: const TextStyle(
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldWatch != true || !mounted) {
+      return false;
+    }
+
+    final completer = Completer<bool>();
+    bool didEarnReward = false;
+    bool didFailToLoad = false;
+
+    RewardedAd.load(
+      adUnitId: _kRewardedAdUnitId,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) {
+          ad.fullScreenContentCallback = FullScreenContentCallback(
+            onAdDismissedFullScreenContent: (ad) {
+              ad.dispose();
+              if (!completer.isCompleted) {
+                completer.complete(didEarnReward);
+              }
+            },
+            onAdFailedToShowFullScreenContent: (ad, error) {
+              ad.dispose();
+              if (!completer.isCompleted) {
+                completer.complete(false);
+              }
+            },
+          );
+
+          ad.show(
+            onUserEarnedReward: (adWithoutView, rewardItem) {
+              didEarnReward = true;
+            },
+          );
+        },
+        onAdFailedToLoad: (_) {
+          didFailToLoad = true;
+          if (!completer.isCompleted) {
+            completer.complete(false);
+          }
+        },
+      ),
+    );
+
+    final bool unlocked = await completer.future;
+    if (!mounted) return unlocked;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            unlocked ? doneText : (didFailToLoad ? failedText : notRewardedText),
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+
+    return unlocked;
+  }
+
   Future<void> _loadHuntingSession() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -391,11 +521,20 @@ class _RootScreenState extends State<RootScreen> {
     final String? savedBoardsJson = prefs.getString(_kSavedColorBoardsKey);
     if (savedBoardsJson != null) {
       final List<dynamic> decodedList = jsonDecode(savedBoardsJson);
+      final List<ColorBoard> loadedBoards = decodedList
+          .map((item) => ColorBoard.fromJson(item))
+          .toList();
+      final List<ColorBoard> filteredBoards = loadedBoards
+          .where((board) => !_isLegacyDummyBoard(board))
+          .toList();
+
       setState(() {
-        _savedColorBoards = decodedList
-            .map((item) => ColorBoard.fromJson(item))
-            .toList();
+        _savedColorBoards = filteredBoards;
       });
+
+      if (filteredBoards.length != loadedBoards.length) {
+        await _saveColorBoards();
+      }
     }
 
     // Load target color
@@ -438,6 +577,23 @@ class _RootScreenState extends State<RootScreen> {
         _huntingStartDate = null;
       });
     }
+  }
+
+  bool _isLegacyDummyBoard(ColorBoard board) {
+    const Set<int> legacyDummyColors = {0xFFFF6B6B, 0xFF4ECDC4, 0xFFFFA07A};
+    const Set<String> legacyDummyMemos = {
+      '데모용 컬러 헌팅',
+      '여러 날에 걸친 헌팅',
+      '2월 첫 헌팅',
+    };
+
+    final bool hasOnlyEmptyImagePaths = board.gridImagePaths.every(
+      (path) => path == null || path.isEmpty,
+    );
+
+    return legacyDummyColors.contains(board.targetColor.value) &&
+        legacyDummyMemos.contains(board.memo) &&
+        hasOnlyEmptyImagePaths;
   }
 
   Future<void> _saveColorBoards() async {

@@ -30,7 +30,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get navCollection => 'Collection';
 
   @override
-  String get archiveHeader => '컬렉션';
+  String get archiveHeader => 'Collection';
 
   @override
   String get archiveEmptyTitle => '아직 수집된 컬러가 없네요';
@@ -84,7 +84,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get save => '저장';
 
   @override
-  String get huntingSavedArchived => '헌팅이 저장되어 아카이브되었습니다!';
+  String get huntingSavedArchived => '콜라주가 저장되었습니다!';
 
   @override
   String get collageSaving => '콜라주 이미지를 갤러리에 저장 중입니다...';
