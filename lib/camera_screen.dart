@@ -1,5 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:image/image.dart' as img;
 
 class CameraScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -26,6 +28,17 @@ class _CameraScreenState extends State<CameraScreen> {
   double _maxZoomLevel = 1.0;
   Offset? _focusPoint;
   bool _showFocusCircle = false;
+  int _pointerCount = 0;
+  double _previewViewportAspectRatio = 9 / 16;
+
+  Future<void> _configureAutoFocusDefaults() async {
+    try {
+      await _controller.setFocusMode(FocusMode.auto);
+    } catch (_) {}
+    try {
+      await _controller.setExposureMode(ExposureMode.auto);
+    } catch (_) {}
+  }
 
   @override
   void initState() {
@@ -39,13 +52,20 @@ class _CameraScreenState extends State<CameraScreen> {
       ResolutionPreset.medium,
     );
 
-    _initializeControllerFuture = _controller.initialize().then((_) {
-      _controller.getMinZoomLevel().then((min) => _minZoomLevel = min);
-      _controller.getMaxZoomLevel().then((max) => _maxZoomLevel = max);
-      _controller.setFlashMode(_currentFlashMode);
+    _initializeControllerFuture = _controller.initialize().then((_) async {
+      final min = await _controller.getMinZoomLevel();
+      final max = await _controller.getMaxZoomLevel();
+      await _controller.setFlashMode(_currentFlashMode);
+      await _configureAutoFocusDefaults();
+
+      final initialZoom = min.clamp(1.0, max);
+      await _controller.setZoomLevel(initialZoom);
+      if (!mounted) return;
       setState(() {
-        _currentZoomLevel = 1.0;
-        _baseZoomLevel = 1.0;
+        _minZoomLevel = min;
+        _maxZoomLevel = max;
+        _currentZoomLevel = initialZoom;
+        _baseZoomLevel = initialZoom;
       });
     });
 
@@ -60,28 +80,39 @@ class _CameraScreenState extends State<CameraScreen> {
     super.dispose();
   }
 
-  void _handleTapToFocus(TapUpDetails details) {
-    if (_controller.value.isInitialized) {
-      final screenSize = MediaQuery.of(context).size;
-      final x = details.localPosition.dx / screenSize.width;
-      final y = details.localPosition.dy / screenSize.height;
+  Future<void> _handleTapToFocus(TapDownDetails details, Size previewSize) async {
+    if (!_controller.value.isInitialized) return;
 
-      _controller.setFocusPoint(Offset(x, y));
-      _controller.setFocusMode(FocusMode.auto);
+    final x = (details.localPosition.dx / previewSize.width).clamp(0.0, 1.0);
+    final y = (details.localPosition.dy / previewSize.height).clamp(0.0, 1.0);
+    final point = Offset(x, y);
 
-      setState(() {
-        _focusPoint = details.localPosition;
-        _showFocusCircle = true;
-      });
+    setState(() {
+      _focusPoint = details.localPosition;
+      _showFocusCircle = true;
+    });
 
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          setState(() {
-            _showFocusCircle = false;
-          });
-        }
-      });
+    try {
+      await _controller.setFocusMode(FocusMode.auto);
+      await _controller.setExposureMode(ExposureMode.auto);
+      await _controller.setFocusPoint(point);
+      await _controller.setExposurePoint(point);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('이 기기에서는 탭 초점이 제한될 수 있습니다'),
+          duration: Duration(seconds: 1),
+        ),
+      );
     }
+
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted) return;
+      setState(() {
+        _showFocusCircle = false;
+      });
+    });
   }
 
   void _onSwitchCamera() {
@@ -90,6 +121,27 @@ class _CameraScreenState extends State<CameraScreen> {
       _selectedCameraIndex = (_selectedCameraIndex + 1) % widget.cameras.length;
       _initializeCamera(_selectedCameraIndex);
     }
+  }
+
+  void _onScaleStart(ScaleStartDetails details) {
+    if (_pointerCount < 2) return;
+    _baseZoomLevel = _currentZoomLevel;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    if (_pointerCount < 2 || !_controller.value.isInitialized) return;
+
+    final nextZoom = (_baseZoomLevel * details.scale).clamp(
+      _minZoomLevel,
+      _maxZoomLevel,
+    );
+
+    if ((nextZoom - _currentZoomLevel).abs() < 0.01) return;
+
+    setState(() {
+      _currentZoomLevel = nextZoom;
+    });
+    _controller.setZoomLevel(nextZoom);
   }
 
   void _onFlashModeButtonPressed() {
@@ -122,11 +174,50 @@ class _CameraScreenState extends State<CameraScreen> {
     try {
       await _initializeControllerFuture;
       final image = await _controller.takePicture();
+      final processedPath = await _cropCapturedImageToPreview(image.path);
       if (!mounted) return;
-      Navigator.pop(context, image.path);
+      Navigator.pop(context, processedPath);
     } catch (e) {
       // Keep camera screen alive if capture fails.
       debugPrint('Failed to take picture: $e');
+    }
+  }
+
+  Future<String> _cropCapturedImageToPreview(String imagePath) async {
+    try {
+      final file = File(imagePath);
+      final bytes = await file.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) return imagePath;
+
+      final targetAspectRatio = _previewViewportAspectRatio;
+      final imageAspectRatio = decoded.width / decoded.height;
+
+      int cropX = 0;
+      int cropY = 0;
+      int cropWidth = decoded.width;
+      int cropHeight = decoded.height;
+
+      if (imageAspectRatio > targetAspectRatio) {
+        cropWidth = (decoded.height * targetAspectRatio).round();
+        cropX = ((decoded.width - cropWidth) / 2).round();
+      } else if (imageAspectRatio < targetAspectRatio) {
+        cropHeight = (decoded.width / targetAspectRatio).round();
+        cropY = ((decoded.height - cropHeight) / 2).round();
+      }
+
+      final cropped = img.copyCrop(
+        decoded,
+        x: cropX.clamp(0, decoded.width - 1),
+        y: cropY.clamp(0, decoded.height - 1),
+        width: cropWidth.clamp(1, decoded.width),
+        height: cropHeight.clamp(1, decoded.height),
+      );
+
+      await file.writeAsBytes(img.encodeJpg(cropped, quality: 95), flush: true);
+      return imagePath;
+    } catch (_) {
+      return imagePath;
     }
   }
 
@@ -144,28 +235,74 @@ class _CameraScreenState extends State<CameraScreen> {
           if (snapshot.connectionState == ConnectionState.done) {
             return LayoutBuilder(
               builder: (context, constraints) {
-                final previewAspectRatio = _controller.value.aspectRatio;
                 final screenAspectRatio =
                     constraints.maxWidth / constraints.maxHeight;
-                final scale = previewAspectRatio / screenAspectRatio;
+                final rawPreviewSize = _controller.value.previewSize;
+                final textureAspectRatio = rawPreviewSize == null
+                    ? _controller.value.aspectRatio
+                    : rawPreviewSize.height / rawPreviewSize.width;
+                final fittedWidth = constraints.maxHeight * textureAspectRatio;
+                final previewSize = Size(
+                  constraints.maxWidth,
+                  constraints.maxHeight,
+                );
+                _previewViewportAspectRatio = screenAspectRatio;
 
                 return Stack(
                   fit: StackFit.expand,
                   children: [
                     GestureDetector(
-                      onTapUp: _handleTapToFocus,
-                      onScaleStart: (details) {
-                        _baseZoomLevel = _currentZoomLevel;
-                      },
-                      onScaleUpdate: (details) {
-                        _currentZoomLevel = (_baseZoomLevel * details.scale)
-                            .clamp(_minZoomLevel, _maxZoomLevel);
-                        _controller.setZoomLevel(_currentZoomLevel);
-                      },
-                      child: Transform.scale(
-                        scale: scale < 1 ? 1 / scale : scale,
-                        alignment: Alignment.center,
-                        child: Center(child: CameraPreview(_controller)),
+                      onTapDown: (details) =>
+                          _handleTapToFocus(details, previewSize),
+                      onScaleStart: _onScaleStart,
+                      onScaleUpdate: _onScaleUpdate,
+                      child: Listener(
+                        onPointerDown: (_) => _pointerCount++,
+                        onPointerUp: (_) {
+                          if (_pointerCount > 0) _pointerCount--;
+                        },
+                        onPointerCancel: (_) {
+                          if (_pointerCount > 0) _pointerCount--;
+                        },
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ClipRect(
+                              child: OverflowBox(
+                                alignment: Alignment.center,
+                                minWidth: 0,
+                                minHeight: 0,
+                                maxWidth: double.infinity,
+                                maxHeight: double.infinity,
+                                child: FittedBox(
+                                  fit: BoxFit.cover,
+                                  child: SizedBox(
+                                    width: fittedWidth,
+                                    height: constraints.maxHeight,
+                                    child: CameraPreview(_controller),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            CustomPaint(
+                              size: Size.infinite,
+                              painter: _GridPainter(),
+                            ),
+                            if (_showFocusCircle && _focusPoint != null)
+                              Positioned(
+                                top: _focusPoint!.dy - 30,
+                                left: _focusPoint!.dx - 30,
+                                child: Container(
+                                  height: 60,
+                                  width: 60,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 2),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                     Container(
@@ -183,7 +320,6 @@ class _CameraScreenState extends State<CameraScreen> {
                         ),
                       ),
                     ),
-                    CustomPaint(size: Size.infinite, painter: _GridPainter()),
                     IgnorePointer(
                       child: SafeArea(
                         child: Padding(
@@ -202,19 +338,6 @@ class _CameraScreenState extends State<CameraScreen> {
                         ),
                       ),
                     ),
-                    if (_showFocusCircle && _focusPoint != null)
-                      Positioned(
-                        top: _focusPoint!.dy - 30,
-                        left: _focusPoint!.dx - 30,
-                        child: Container(
-                          height: 60,
-                          width: 60,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                        ),
-                      ),
                     SafeArea(
                       child: Column(
                         children: [
@@ -413,6 +536,118 @@ class _CameraControlButton extends StatelessWidget {
         onPressed: onPressed,
         icon: Icon(icon),
         color: Colors.white,
+      ),
+    );
+  }
+}
+
+class CameraMockScreen extends StatelessWidget {
+  final Color targetColor;
+
+  const CameraMockScreen({super.key, required this.targetColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Container(color: Colors.black),
+          CustomPaint(size: Size.infinite, painter: _GridPainter()),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.35),
+                  Colors.transparent,
+                  Colors.transparent,
+                  Colors.black.withOpacity(0.45),
+                ],
+                stops: const [0.0, 0.2, 0.7, 1.0],
+              ),
+            ),
+          ),
+          Center(
+            child: Text(
+              'Simulator Camera Preview',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.75),
+                fontWeight: FontWeight.w500,
+                fontSize: 15,
+              ),
+            ),
+          ),
+          IgnorePointer(
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 18, top: 96),
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      color: targetColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                  child: Row(
+                    children: [
+                      _CameraControlButton(
+                        icon: Icons.close,
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      const Spacer(),
+                      _CameraControlButton(icon: Icons.flash_off, onPressed: null),
+                      const SizedBox(width: 10),
+                      _CameraControlButton(
+                        icon: Icons.cameraswitch_outlined,
+                        onPressed: null,
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 12, 0, 20),
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      width: 84,
+                      height: 84,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: targetColor, width: 5),
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 66,
+                          height: 66,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

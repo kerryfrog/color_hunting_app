@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'l10n/app_localizations.dart';
 import 'main.dart'; // Import ColorBoard class
 import 'archive_detail_screen.dart';
@@ -25,19 +26,6 @@ class ArchiveTab extends StatelessWidget {
     final luminance = backgroundColor.computeLuminance();
     // Return white for dark colors, black for light colors
     return luminance > 0.5 ? Colors.black : Colors.white;
-  }
-
-  // 수집된 사진 개수를 기반으로 블록 높이 계산
-  double _getBlockHeight(ColorBoard board) {
-    final photoCount = board.gridImagePaths
-        .where((path) => path != null)
-        .length;
-
-    // 사진이 많을수록 더 큰 블록
-    if (photoCount >= 10) return 240.0;
-    if (photoCount >= 7) return 200.0;
-    if (photoCount >= 4) return 160.0;
-    return 140.0;
   }
 
   // RGB 값 추출
@@ -153,13 +141,8 @@ class ArchiveTab extends StatelessWidget {
                     colorBoard.targetColor,
                   );
 
-                  // 사진 개수 계산
-                  final photoCount = colorBoard.gridImagePaths
-                      .where((path) => path != null)
-                      .length;
-
                   // 블록 높이 (세로로 긴 직사각형)
-                  final blockHeight = columnWidth * 1.4;
+                  final blockHeight = columnWidth * 1.3;
 
                   // 날짜 포맷팅
                   String dateString = '';
@@ -203,8 +186,7 @@ class ArchiveTab extends StatelessWidget {
                             if (dateString.isNotEmpty)
                               Text(
                                 dateString,
-                                style: TextStyle(
-                                  fontFamily: 'Pretendard',
+                                style: GoogleFonts.lora(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 20,
                                   color: textColor,
@@ -219,8 +201,7 @@ class ArchiveTab extends StatelessWidget {
                               children: [
                                 Text(
                                   hexColor,
-                                  style: TextStyle(
-                                    fontFamily: 'Pretendard',
+                                  style: GoogleFonts.lora(
                                     fontWeight: FontWeight.w300,
                                     fontSize: 13,
                                     color: textColor.withOpacity(0.9),
@@ -230,8 +211,7 @@ class ArchiveTab extends StatelessWidget {
                                 const SizedBox(height: 2),
                                 Text(
                                   rgbColor,
-                                  style: TextStyle(
-                                    fontFamily: 'Pretendard',
+                                  style: GoogleFonts.lora(
                                     fontWeight: FontWeight.w300,
                                     fontSize: 11,
                                     color: textColor.withOpacity(0.7),

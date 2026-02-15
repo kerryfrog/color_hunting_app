@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
@@ -157,8 +158,7 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
                 ),
                 child: Text(
                   hexColor,
-                  style: TextStyle(
-                    fontFamily: 'Inter',
+                  style: GoogleFonts.lora(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
                     color:
@@ -171,8 +171,7 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
               ),
               Text(
                 dateString,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
+                style: GoogleFonts.lora(
                   fontWeight: FontWeight.w300,
                   fontSize: 13,
                   color: Color(0xFF999999),

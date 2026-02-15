@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert'; // For JSON encoding/decoding
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 import 'package:camera/camera.dart';
@@ -491,7 +492,9 @@ class _RootScreenState extends State<RootScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            unlocked ? doneText : (didFailToLoad ? failedText : notRewardedText),
+            unlocked
+                ? doneText
+                : (didFailToLoad ? failedText : notRewardedText),
           ),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
@@ -519,23 +522,37 @@ class _RootScreenState extends State<RootScreen> {
 
     // Load saved color boards
     final String? savedBoardsJson = prefs.getString(_kSavedColorBoardsKey);
+    List<ColorBoard> loadedBoards = [];
+
     if (savedBoardsJson != null) {
       final List<dynamic> decodedList = jsonDecode(savedBoardsJson);
-      final List<ColorBoard> loadedBoards = decodedList
+      loadedBoards = decodedList
           .map((item) => ColorBoard.fromJson(item))
           .toList();
       final List<ColorBoard> filteredBoards = loadedBoards
           .where((board) => !_isLegacyDummyBoard(board))
           .toList();
+      loadedBoards = filteredBoards;
 
-      setState(() {
-        _savedColorBoards = filteredBoards;
-      });
-
-      if (filteredBoards.length != loadedBoards.length) {
+      if (filteredBoards.length != decodedList.length) {
         await _saveColorBoards();
       }
     }
+
+    // 임시 목업 데이터 추가
+    loadedBoards.add(
+      ColorBoard(
+        targetColor: const Color(0xFFFF6B9D),
+        gridImagePaths: List.filled(12, null),
+        memo: '목업 데이터',
+        createdDate: DateTime(2024, 3, 1),
+        completedDate: DateTime(2025, 1, 1),
+      ),
+    );
+
+    setState(() {
+      _savedColorBoards = loadedBoards;
+    });
 
     // Load target color
     final int? savedTargetColorValue = prefs.getInt(_kTargetColorKey);
@@ -1067,9 +1084,13 @@ class _RootScreenState extends State<RootScreen> {
 
     if (selectionType == ImageSelectionType.camera) {
       if (cameras.isEmpty) {
-        ScaffoldMessenger.of(
+        await Navigator.push(
           context,
-        ).showSnackBar(SnackBar(content: Text(l10n.noCamerasFound)));
+          MaterialPageRoute(
+            builder: (context) =>
+                CameraMockScreen(targetColor: _targetColor),
+          ),
+        );
         return;
       }
       imagePath = await Navigator.push(
@@ -1171,40 +1192,40 @@ class _RootScreenState extends State<RootScreen> {
             case 1: // Hunting Tab
               if (_isHuntingActive) {
                 appBarColor = _targetColor;
-                appBarForegroundColor = Colors.white;
+                // 배경색 밝기에 따라 텍스트 색상 자동 결정
+                appBarForegroundColor = _targetColor.computeLuminance() > 0.5
+                    ? Colors.black
+                    : Colors.white;
               } else {
                 appBarColor = Colors.white;
                 appBarForegroundColor = const Color(0xFF2D2D2D);
               }
               titleWidget = Text(
                 l10n.appbarHunting,
-                style: const TextStyle(
-                  fontFamily: 'Pretendard',
-                  fontWeight: FontWeight.w600,
-                  fontSize: 18,
-                  letterSpacing: -0.5,
+                style: GoogleFonts.lora(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                  letterSpacing: -0.8,
                 ),
               );
               break;
             case 2: // Archive Tab
               titleWidget = Text(
                 l10n.appbarCollection,
-                style: const TextStyle(
-                  fontFamily: 'Pretendard',
-                  fontWeight: FontWeight.w600,
-                  fontSize: 18,
-                  letterSpacing: -0.5,
+                style: GoogleFonts.lora(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                  letterSpacing: -0.8,
                 ),
               );
               break;
             default: // Target Tab
               titleWidget = Text(
                 l10n.appbarTarget,
-                style: const TextStyle(
-                  fontFamily: 'Pretendard',
-                  fontWeight: FontWeight.w600,
-                  fontSize: 18,
-                  letterSpacing: -0.5,
+                style: GoogleFonts.lora(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                  letterSpacing: -0.8,
                 ),
               );
           }
@@ -1213,7 +1234,7 @@ class _RootScreenState extends State<RootScreen> {
             backgroundColor: Colors.white,
             appBar: AppBar(
               title: titleWidget,
-              centerTitle: true,
+              centerTitle: false,
               backgroundColor: appBarColor,
               foregroundColor: appBarForegroundColor,
               elevation: 0,

@@ -12,10 +12,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'Color Hunting App';
 
   @override
-  String get appbarTarget => 'Select Target';
+  String get appbarTarget => 'Target';
 
   @override
-  String get appbarHunting => 'Color Hunting';
+  String get appbarHunting => 'Hunting';
 
   @override
   String get appbarCollection => 'Collection';

@@ -1,7 +1,7 @@
 {
   "appTitle": "Color Hunting App",
-  "appbarTarget": "Select Target",
-  "appbarHunting": "Color Hunting",
+  "appbarTarget": "Target",
+  "appbarHunting": "Hunting",
   "appbarCollection": "Collection",
   "navTarget": "Target",
   "navHunting": "Hunting",

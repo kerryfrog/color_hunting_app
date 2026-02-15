@@ -111,13 +111,13 @@ abstract class AppLocalizations {
   /// No description provided for @appbarTarget.
   ///
   /// In en, this message translates to:
-  /// **'Select Target'**
+  /// **'Target'**
   String get appbarTarget;
 
   /// No description provided for @appbarHunting.
   ///
   /// In en, this message translates to:
-  /// **'Color Hunting'**
+  /// **'Hunting'**
   String get appbarHunting;
 
   /// No description provided for @appbarCollection.
