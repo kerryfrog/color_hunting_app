@@ -2,7 +2,8 @@ import 'dart:io';
 import 'package:integration_test/integration_test_driver_extended.dart';
 
 Future<void> main() async {
-  final outDir = Directory('mockup/captures');
+  final outPath = Platform.environment['MOCKUP_CAPTURE_DIR'] ?? 'mockup/captures';
+  final outDir = Directory(outPath);
   if (!outDir.existsSync()) {
     outDir.createSync(recursive: true);
   }

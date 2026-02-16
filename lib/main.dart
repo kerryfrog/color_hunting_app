@@ -23,14 +23,6 @@ List<CameraDescription> cameras = [];
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await MobileAds.instance.initialize();
-
-  try {
-    cameras = await availableCameras();
-  } on CameraException catch (e) {
-    print('Error: ${e.code}\nError Message: ${e.description}');
-  }
-
   runApp(const MyApp());
 }
 
@@ -134,15 +126,26 @@ class ColorBoard {
 
   // Create ColorBoard from JSON
   factory ColorBoard.fromJson(Map<String, dynamic> json) {
+    final targetColorValue = json['targetColor'];
+    final createdDateRaw = json['createdDate'];
+    final completedDateRaw = json['completedDate'];
+    final gridImagePathsRaw = json['gridImagePaths'];
+
     return ColorBoard(
-      targetColor: Color(json['targetColor']),
-      gridImagePaths: List<String?>.from(json['gridImagePaths']),
-      memo: json['memo'],
-      createdDate: json['createdDate'] != null
-          ? DateTime.parse(json['createdDate'])
+      targetColor: Color(
+        targetColorValue is int ? targetColorValue : Colors.transparent.value,
+      ),
+      gridImagePaths: gridImagePathsRaw is List
+          ? gridImagePathsRaw
+                .map<String?>((path) => path == null ? null : path.toString())
+                .toList()
+          : List<String?>.filled(12, null),
+      memo: json['memo']?.toString(),
+      createdDate: createdDateRaw is String
+          ? DateTime.tryParse(createdDateRaw)
           : null,
-      completedDate: json['completedDate'] != null
-          ? DateTime.parse(json['completedDate'])
+      completedDate: completedDateRaw is String
+          ? DateTime.tryParse(completedDateRaw)
           : null,
     );
   }
@@ -171,8 +174,15 @@ class _RootScreenState extends State<RootScreen> {
   static const String _kIsHuntingActiveKey = 'isHuntingActive';
   static const String _kHuntingStartDateKey = 'huntingStartDate';
   static const String _kAppLanguageKey = 'appLanguage';
-  static const String _kRewardedAdUnitId =
+  static const String _kIosRewardedAdUnitId =
+      'ca-app-pub-2881048601217100/8080604602';
+  static const String _kTestRewardedAdUnitId =
       'ca-app-pub-3940256099942544/5224354917';
+
+  String get _rewardedAdUnitId =>
+      Platform.isIOS ? _kIosRewardedAdUnitId : _kTestRewardedAdUnitId;
+
+  Future<void>? _mobileAdsInitializeFuture;
 
   Locale get _currentLocale => switch (_appLanguage) {
     AppLanguage.ko => const Locale('ko'),
@@ -182,6 +192,31 @@ class _RootScreenState extends State<RootScreen> {
   };
 
   AppLocalizations get _currentL10n => lookupAppLocalizations(_currentLocale);
+
+  Future<bool> _ensureMobileAdsInitialized() async {
+    _mobileAdsInitializeFuture ??= MobileAds.instance.initialize().then((_) {});
+    try {
+      await _mobileAdsInitializeFuture;
+      return true;
+    } catch (e) {
+      debugPrint('MobileAds initialize failed: $e');
+      _mobileAdsInitializeFuture = null;
+      return false;
+    }
+  }
+
+  Future<void> _ensureCamerasLoaded() async {
+    if (cameras.isNotEmpty) return;
+    try {
+      cameras = await availableCameras();
+    } on CameraException catch (e) {
+      debugPrint('Error: ${e.code}\nError Message: ${e.description}');
+      cameras = [];
+    } catch (e) {
+      debugPrint('availableCameras failed: $e');
+      cameras = [];
+    }
+  }
 
   @override
   void initState() {
@@ -447,12 +482,25 @@ class _RootScreenState extends State<RootScreen> {
       return false;
     }
 
+    final bool isAdsReady = await _ensureMobileAdsInitialized();
+    if (!isAdsReady) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(failedText),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return false;
+    }
+
     final completer = Completer<bool>();
     bool didEarnReward = false;
     bool didFailToLoad = false;
 
     RewardedAd.load(
-      adUnitId: _kRewardedAdUnitId,
+      adUnitId: _rewardedAdUnitId,
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
@@ -506,88 +554,99 @@ class _RootScreenState extends State<RootScreen> {
   }
 
   Future<void> _loadHuntingSession() async {
-    final prefs = await SharedPreferences.getInstance();
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    final String? savedLanguage = prefs.getString(_kAppLanguageKey);
-    if (savedLanguage != null) {
-      setState(() {
-        _appLanguage = switch (savedLanguage) {
-          'en' => AppLanguage.en,
-          'ja' => AppLanguage.ja,
-          'zh' => AppLanguage.zh,
-          _ => AppLanguage.ko,
-        };
-      });
-    }
-
-    // Load saved color boards
-    final String? savedBoardsJson = prefs.getString(_kSavedColorBoardsKey);
-    List<ColorBoard> loadedBoards = [];
-
-    if (savedBoardsJson != null) {
-      final List<dynamic> decodedList = jsonDecode(savedBoardsJson);
-      loadedBoards = decodedList
-          .map((item) => ColorBoard.fromJson(item))
-          .toList();
-      final List<ColorBoard> filteredBoards = loadedBoards
-          .where((board) => !_isLegacyDummyBoard(board))
-          .toList();
-      loadedBoards = filteredBoards;
-
-      if (filteredBoards.length != decodedList.length) {
-        await _saveColorBoards();
+      final String? savedLanguage = prefs.getString(_kAppLanguageKey);
+      if (savedLanguage != null) {
+        setState(() {
+          _appLanguage = switch (savedLanguage) {
+            'en' => AppLanguage.en,
+            'ja' => AppLanguage.ja,
+            'zh' => AppLanguage.zh,
+            _ => AppLanguage.ko,
+          };
+        });
       }
-    }
 
-    // 임시 목업 데이터 추가
-    loadedBoards.add(
-      ColorBoard(
-        targetColor: const Color(0xFFFF6B9D),
-        gridImagePaths: List.filled(12, null),
-        memo: '목업 데이터',
-        createdDate: DateTime(2024, 3, 1),
-        completedDate: DateTime(2025, 1, 1),
-      ),
-    );
+      // Load saved color boards
+      final String? savedBoardsJson = prefs.getString(_kSavedColorBoardsKey);
+      List<ColorBoard> loadedBoards = [];
 
-    setState(() {
-      _savedColorBoards = loadedBoards;
-    });
+      if (savedBoardsJson != null) {
+        final dynamic decoded = jsonDecode(savedBoardsJson);
+        final List<dynamic> decodedList = decoded is List ? decoded : [];
+        loadedBoards = decodedList
+            .whereType<Map<String, dynamic>>()
+            .map((item) => ColorBoard.fromJson(item))
+            .toList();
+        final List<ColorBoard> filteredBoards = loadedBoards
+            .where((board) => !_isLegacyDummyBoard(board))
+            .toList();
+        loadedBoards = filteredBoards;
 
-    // Load target color
-    final int? savedTargetColorValue = prefs.getInt(_kTargetColorKey);
-    final bool savedIsHuntingActive =
-        prefs.getBool(_kIsHuntingActiveKey) ?? false;
-    final String? savedStartDateString = prefs.getString(_kHuntingStartDateKey);
-    final DateTime? savedStartDate = savedStartDateString != null
-        ? DateTime.parse(savedStartDateString)
-        : null;
-
-    // Load current hunting grid images
-    final List<String>? currentGridImagePaths = prefs.getStringList(
-      _kCurrentHuntingGridKey,
-    );
-    if (currentGridImagePaths != null && currentGridImagePaths.isNotEmpty) {
-      final List<ImageProvider?> loadedImages = List.filled(12, null);
-      bool hasImages = false;
-      for (int i = 0; i < currentGridImagePaths.length; i++) {
-        final path = currentGridImagePaths[i];
-        if (path != null && await File(path).exists()) {
-          loadedImages[i] = FileImage(File(path));
-          hasImages = true;
+        if (filteredBoards.length != decodedList.length) {
+          await _saveColorBoards();
         }
       }
+
       setState(() {
-        _gridImages = loadedImages;
-        _isHuntingActive = savedIsHuntingActive && hasImages;
-        _huntingStartDate = savedStartDate;
-        _targetColor = savedTargetColorValue != null
-            ? Color(savedTargetColorValue)
-            : Colors.transparent;
+        _savedColorBoards = loadedBoards;
       });
-    } else {
-      // If no saved grid images, ensure hunting session is not active and grid is empty
+
+      // Load target color
+      final int? savedTargetColorValue = prefs.getInt(_kTargetColorKey);
+      final bool savedIsHuntingActive =
+          prefs.getBool(_kIsHuntingActiveKey) ?? false;
+      final String? savedStartDateString = prefs.getString(
+        _kHuntingStartDateKey,
+      );
+      final DateTime? savedStartDate = savedStartDateString != null
+          ? DateTime.tryParse(savedStartDateString)
+          : null;
+
+      // Load current hunting grid images
+      final List<String>? currentGridImagePaths = prefs.getStringList(
+        _kCurrentHuntingGridKey,
+      );
+      if (currentGridImagePaths != null && currentGridImagePaths.isNotEmpty) {
+        final List<ImageProvider?> loadedImages = List.filled(12, null);
+        bool hasImages = false;
+        for (int i = 0; i < currentGridImagePaths.length; i++) {
+          final path = currentGridImagePaths[i];
+          if (path.isNotEmpty && await File(path).exists()) {
+            loadedImages[i] = FileImage(File(path));
+            hasImages = true;
+          }
+        }
+        setState(() {
+          _gridImages = loadedImages;
+          _isHuntingActive = savedIsHuntingActive && hasImages;
+          _huntingStartDate = savedStartDate;
+          _targetColor = savedTargetColorValue != null
+              ? Color(savedTargetColorValue)
+              : Colors.transparent;
+        });
+      } else {
+        // If no saved grid images, ensure hunting session is not active and grid is empty
+        setState(() {
+          _isHuntingActive = false;
+          _gridImages = List.filled(12, null);
+          _targetColor = Colors.transparent;
+          _huntingStartDate = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load hunting session, resetting local session: $e');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kSavedColorBoardsKey);
+      await prefs.remove(_kCurrentHuntingGridKey);
+      await prefs.remove(_kTargetColorKey);
+      await prefs.remove(_kIsHuntingActiveKey);
+      await prefs.remove(_kHuntingStartDateKey);
+      if (!mounted) return;
       setState(() {
+        _savedColorBoards = [];
         _isHuntingActive = false;
         _gridImages = List.filled(12, null);
         _targetColor = Colors.transparent;
@@ -1083,6 +1142,7 @@ class _RootScreenState extends State<RootScreen> {
     String? imagePath;
 
     if (selectionType == ImageSelectionType.camera) {
+      await _ensureCamerasLoaded();
       if (cameras.isEmpty) {
         await Navigator.push(
           context,
