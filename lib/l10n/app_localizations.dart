@@ -198,6 +198,12 @@ abstract class AppLocalizations {
   /// **'Reset'**
   String get huntingReset;
 
+  /// No description provided for @huntingImagesCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Only images were reset.'**
+  String get huntingImagesCleared;
+
   /// No description provided for @huntingRemoveImage.
   ///
   /// In en, this message translates to:

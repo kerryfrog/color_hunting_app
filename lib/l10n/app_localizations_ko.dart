@@ -57,6 +57,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get huntingReset => '초기화';
 
   @override
+  String get huntingImagesCleared => '이미지만 초기화되었습니다';
+
+  @override
   String get huntingRemoveImage => '이미지 제거';
 
   @override

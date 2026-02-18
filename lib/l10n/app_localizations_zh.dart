@@ -57,6 +57,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get huntingReset => '重置';
 
   @override
+  String get huntingImagesCleared => '仅图片已重置';
+
+  @override
   String get huntingRemoveImage => '删除图片';
 
   @override

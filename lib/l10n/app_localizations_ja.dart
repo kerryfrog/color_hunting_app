@@ -57,6 +57,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get huntingReset => 'リセット';
 
   @override
+  String get huntingImagesCleared => '画像のみ初期化されました';
+
+  @override
   String get huntingRemoveImage => '画像を削除';
 
   @override

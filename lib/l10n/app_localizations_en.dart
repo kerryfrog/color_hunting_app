@@ -58,6 +58,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get huntingReset => 'Reset';
 
   @override
+  String get huntingImagesCleared => 'Only images were reset.';
+
+  @override
   String get huntingRemoveImage => 'Remove Image';
 
   @override
