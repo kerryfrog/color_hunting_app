@@ -60,6 +60,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get huntingRemoveImage => '이미지 제거';
 
   @override
+  String get huntingDownloadImage => '이미지 다운로드';
+
+  @override
   String get huntingTakeAnother => '다른 사진 찍기';
 
   @override

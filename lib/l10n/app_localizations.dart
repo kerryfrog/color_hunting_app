@@ -204,6 +204,12 @@ abstract class AppLocalizations {
   /// **'Remove Image'**
   String get huntingRemoveImage;
 
+  /// No description provided for @huntingDownloadImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Download Image'**
+  String get huntingDownloadImage;
+
   /// No description provided for @huntingTakeAnother.
   ///
   /// In en, this message translates to:

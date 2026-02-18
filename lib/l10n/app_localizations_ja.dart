@@ -60,6 +60,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get huntingRemoveImage => '画像を削除';
 
   @override
+  String get huntingDownloadImage => '画像をダウンロード';
+
+  @override
   String get huntingTakeAnother => '別の写真を撮る';
 
   @override

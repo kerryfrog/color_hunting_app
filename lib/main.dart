@@ -239,6 +239,7 @@ class _RootScreenState extends State<RootScreen> {
       targetColor: _targetColor,
       gridImages: _gridImages,
       onTakePicture: _pickImageForGridCell,
+      onDownloadImage: _downloadImageFromGridCell,
       onRemoveImage: _removeImageFromGridCell,
       onInitializeSession: _resetHuntingSession,
       onSaveSession: _saveHuntingSession,
@@ -716,16 +717,14 @@ class _RootScreenState extends State<RootScreen> {
   }
 
   void _resetHuntingSession() {
+    final l10n = _currentL10n;
     setState(() {
-      _isHuntingActive = false;
-      _targetColor = Colors.transparent;
       _gridImages = List.filled(12, null);
-      _selectedIndex = 0;
     });
-    _saveHuntingState(); // Persist the empty grid state and hunting state
+    _saveHuntingState(); // Persist cleared grid while keeping current hunting color/session
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Hunting session reset!')));
+    ).showSnackBar(SnackBar(content: Text(l10n.huntingImagesCleared)));
   }
 
   // Function to create an image collage from a list of image paths
@@ -1204,6 +1203,35 @@ class _RootScreenState extends State<RootScreen> {
     );
   }
 
+  Future<void> _downloadImageFromGridCell(int index) async {
+    final l10n = _currentL10n;
+    final imageProvider = _gridImages[index];
+    if (imageProvider is! FileImage) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('저장할 이미지가 없습니다')));
+      return;
+    }
+
+    try {
+      final path = imageProvider.file.path;
+      if (!await imageProvider.file.exists()) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('이미지 파일을 찾을 수 없습니다')));
+        return;
+      }
+      await Gal.putImage(path);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('이미지를 갤러리에 저장했습니다.')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.collageSaveError(e.toString()))));
+    }
+  }
+
   Future<void> _pickMultipleImages() async {
     final List<XFile>? pickedFiles = await _picker.pickMultiImage();
     if (pickedFiles != null && pickedFiles.isNotEmpty) {
@@ -1263,6 +1291,7 @@ class _RootScreenState extends State<RootScreen> {
               titleWidget = Text(
                 l10n.appbarHunting,
                 style: GoogleFonts.lora(
+                  color: appBarForegroundColor,
                   fontWeight: FontWeight.w700,
                   fontSize: 20,
                   letterSpacing: -0.8,

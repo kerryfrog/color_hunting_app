@@ -6,6 +6,7 @@ class HuntingTab extends StatelessWidget {
   final Color targetColor;
   final List<ImageProvider?> gridImages;
   final Function(int) onTakePicture;
+  final Function(int) onDownloadImage;
   final Function(int) onRemoveImage; // Remove image callback
   final VoidCallback onInitializeSession;
   final VoidCallback onSaveSession;
@@ -18,6 +19,7 @@ class HuntingTab extends StatelessWidget {
     required this.targetColor,
     required this.gridImages,
     required this.onTakePicture,
+    required this.onDownloadImage,
     required this.onRemoveImage,
     required this.onInitializeSession,
     required this.onSaveSession,
@@ -120,47 +122,62 @@ class HuntingTab extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(0),
-              child: GridView.builder(
-                padding: EdgeInsets.zero,
-                itemCount: 12,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  childAspectRatio: 1.0,
-                  crossAxisSpacing: 0.0,
-                  mainAxisSpacing: 0.0,
-                ),
-                itemBuilder: (context, index) {
-                  return GestureDetector(
-                    onTap: () {
-                      if (gridImages[index] != null) {
-                        _showImageOptions(context, index);
-                      } else {
-                        onTakePicture(index);
-                      }
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: gridImages[index] == null
-                            ? const Color(0xFFFAFAFA)
-                            : null,
-                        border: Border.all(color: Colors.white, width: 1),
-                        image: gridImages[index] != null
-                            ? DecorationImage(
-                                image: gridImages[index]!,
-                                fit: BoxFit.cover,
-                              )
-                            : null,
-                      ),
-                      child: gridImages[index] == null
-                          ? Center(
-                              child: Icon(
-                                Icons.camera_alt_outlined,
-                                color: Colors.black.withOpacity(0.2),
-                                size: 24,
-                              ),
-                            )
-                          : null,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final safeWidth = constraints.maxWidth > 0
+                      ? constraints.maxWidth
+                      : 1.0;
+                  final safeHeight = constraints.maxHeight > 0
+                      ? constraints.maxHeight
+                      : 1.0;
+                  final itemWidth = safeWidth / 3;
+                  final itemHeight = safeHeight / 4;
+                  final adaptiveChildAspectRatio = itemWidth / itemHeight;
+
+                  return GridView.builder(
+                    padding: EdgeInsets.zero,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: 12,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: adaptiveChildAspectRatio,
+                      crossAxisSpacing: 0.0,
+                      mainAxisSpacing: 0.0,
                     ),
+                    itemBuilder: (context, index) {
+                      return GestureDetector(
+                        onTap: () {
+                          if (gridImages[index] != null) {
+                            _showImageOptions(context, index);
+                          } else {
+                            onTakePicture(index);
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: gridImages[index] == null
+                                ? const Color(0xFFFAFAFA)
+                                : null,
+                            border: Border.all(color: Colors.white, width: 1),
+                            image: gridImages[index] != null
+                                ? DecorationImage(
+                                    image: gridImages[index]!,
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: gridImages[index] == null
+                              ? Center(
+                                  child: Icon(
+                                    Icons.camera_alt_outlined,
+                                    color: Colors.black.withOpacity(0.2),
+                                    size: 24,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -295,6 +312,25 @@ class HuntingTab extends StatelessWidget {
                 onTap: () {
                   Navigator.pop(context);
                   onRemoveImage(index);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.download_outlined,
+                  color: Color(0xFF333333),
+                ),
+                title: Text(
+                  l10n.huntingDownloadImage,
+                  style: const TextStyle(
+                    fontFamily: 'Pretendard',
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                    color: Color(0xFF333333),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  onDownloadImage(index);
                 },
               ),
               ListTile(

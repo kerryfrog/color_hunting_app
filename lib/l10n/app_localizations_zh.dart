@@ -60,6 +60,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get huntingRemoveImage => '删除图片';
 
   @override
+  String get huntingDownloadImage => '下载图片';
+
+  @override
   String get huntingTakeAnother => '再拍一张';
 
   @override

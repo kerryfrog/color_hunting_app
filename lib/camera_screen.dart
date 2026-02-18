@@ -18,6 +18,8 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen> {
+  static const double _kMaxAllowedZoom = 10.0;
+
   late CameraController _controller;
   late Future<void> _initializeControllerFuture;
   int _selectedCameraIndex = 0;
@@ -50,11 +52,13 @@ class _CameraScreenState extends State<CameraScreen> {
     _controller = CameraController(
       widget.cameras[cameraIndex],
       ResolutionPreset.medium,
+      enableAudio: false,
     );
 
     _initializeControllerFuture = _controller.initialize().then((_) async {
       final min = await _controller.getMinZoomLevel();
-      final max = await _controller.getMaxZoomLevel();
+      final deviceMax = await _controller.getMaxZoomLevel();
+      final max = deviceMax.clamp(min, _kMaxAllowedZoom);
       await _controller.setFlashMode(_currentFlashMode);
       await _configureAutoFocusDefaults();
 

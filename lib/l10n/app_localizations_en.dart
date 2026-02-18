@@ -61,6 +61,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get huntingRemoveImage => 'Remove Image';
 
   @override
+  String get huntingDownloadImage => 'Download Image';
+
+  @override
   String get huntingTakeAnother => 'Take Another Photo';
 
   @override
