@@ -106,6 +106,7 @@ class ColorBoard {
   final String? memo; // User's note about this hunting session
   final DateTime? createdDate; // When hunting started
   final DateTime? completedDate; // When hunting was completed
+  final int collectionNumber; // Sequential collection number (1..N)
 
   ColorBoard({
     required this.targetColor,
@@ -113,7 +114,19 @@ class ColorBoard {
     this.memo,
     this.createdDate,
     this.completedDate,
+    required this.collectionNumber,
   });
+
+  ColorBoard copyWith({int? collectionNumber}) {
+    return ColorBoard(
+      targetColor: targetColor,
+      gridImagePaths: gridImagePaths,
+      memo: memo,
+      createdDate: createdDate,
+      completedDate: completedDate,
+      collectionNumber: collectionNumber ?? this.collectionNumber,
+    );
+  }
 
   // Convert ColorBoard to JSON
   Map<String, dynamic> toJson() => {
@@ -122,6 +135,7 @@ class ColorBoard {
     'memo': memo,
     'createdDate': createdDate?.toIso8601String(),
     'completedDate': completedDate?.toIso8601String(),
+    'collectionNumber': collectionNumber,
   };
 
   // Create ColorBoard from JSON
@@ -130,6 +144,12 @@ class ColorBoard {
     final createdDateRaw = json['createdDate'];
     final completedDateRaw = json['completedDate'];
     final gridImagePathsRaw = json['gridImagePaths'];
+    final collectionNumberRaw = json['collectionNumber'];
+    final int collectionNumber = switch (collectionNumberRaw) {
+      int value => value,
+      String value => int.tryParse(value) ?? 0,
+      _ => 0,
+    };
 
     return ColorBoard(
       targetColor: Color(
@@ -147,6 +167,7 @@ class ColorBoard {
       completedDate: completedDateRaw is String
           ? DateTime.tryParse(completedDateRaw)
           : null,
+      collectionNumber: collectionNumber,
     );
   }
 }
@@ -156,6 +177,16 @@ class _MemoDialogResult {
   final String? memo;
 
   const _MemoDialogResult({required this.shouldSave, this.memo});
+}
+
+class _CollectionNumberNormalizationResult {
+  final List<ColorBoard> boards;
+  final bool didChange;
+
+  const _CollectionNumberNormalizationResult({
+    required this.boards,
+    required this.didChange,
+  });
 }
 
 class _RootScreenState extends State<RootScreen> {
@@ -573,6 +604,7 @@ class _RootScreenState extends State<RootScreen> {
       // Load saved color boards
       final String? savedBoardsJson = prefs.getString(_kSavedColorBoardsKey);
       List<ColorBoard> loadedBoards = [];
+      bool shouldPersistBoards = false;
 
       if (savedBoardsJson != null) {
         final dynamic decoded = jsonDecode(savedBoardsJson);
@@ -587,13 +619,22 @@ class _RootScreenState extends State<RootScreen> {
         loadedBoards = filteredBoards;
 
         if (filteredBoards.length != decodedList.length) {
-          await _saveColorBoards();
+          shouldPersistBoards = true;
         }
+      }
+
+      final normalization = _normalizeCollectionNumbers(loadedBoards);
+      loadedBoards = normalization.boards;
+      if (normalization.didChange) {
+        shouldPersistBoards = true;
       }
 
       setState(() {
         _savedColorBoards = loadedBoards;
       });
+      if (shouldPersistBoards) {
+        await _saveColorBoards();
+      }
 
       // Load target color
       final int? savedTargetColorValue = prefs.getInt(_kTargetColorKey);
@@ -671,6 +712,45 @@ class _RootScreenState extends State<RootScreen> {
     return legacyDummyColors.contains(board.targetColor.value) &&
         legacyDummyMemos.contains(board.memo) &&
         hasOnlyEmptyImagePaths;
+  }
+
+  DateTime _collectionSortDate(ColorBoard board) {
+    return board.completedDate ??
+        board.createdDate ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  _CollectionNumberNormalizationResult _normalizeCollectionNumbers(
+    List<ColorBoard> boards,
+  ) {
+    final normalizedBoards = List<ColorBoard>.from(boards);
+    final indexedBoards = normalizedBoards.asMap().entries.toList()
+      ..sort((a, b) {
+        final dateCompare = _collectionSortDate(
+          a.value,
+        ).compareTo(_collectionSortDate(b.value));
+        if (dateCompare != 0) return dateCompare;
+        return a.key.compareTo(b.key);
+      });
+
+    bool didChange = false;
+    int collectionNumber = 1;
+
+    for (final entry in indexedBoards) {
+      final board = normalizedBoards[entry.key];
+      if (board.collectionNumber != collectionNumber) {
+        normalizedBoards[entry.key] = board.copyWith(
+          collectionNumber: collectionNumber,
+        );
+        didChange = true;
+      }
+      collectionNumber++;
+    }
+
+    return _CollectionNumberNormalizationResult(
+      boards: normalizedBoards,
+      didChange: didChange,
+    );
   }
 
   Future<void> _saveColorBoards() async {
@@ -821,23 +901,26 @@ class _RootScreenState extends State<RootScreen> {
     final completedDate = DateTime.now();
 
     setState(() {
-      _savedColorBoards.add(
-        ColorBoard(
-          targetColor: _targetColor,
-          gridImagePaths: imagePaths,
-          memo: memo,
-          createdDate: _huntingStartDate,
-          completedDate: completedDate,
-        ),
-      );
+      final updatedBoards = List<ColorBoard>.from(_savedColorBoards)
+        ..add(
+          ColorBoard(
+            targetColor: _targetColor,
+            gridImagePaths: imagePaths,
+            memo: memo,
+            createdDate: _huntingStartDate,
+            completedDate: completedDate,
+            collectionNumber: 0,
+          ),
+        );
+      _savedColorBoards = _normalizeCollectionNumbers(updatedBoards).boards;
       _isHuntingActive = false;
       _targetColor = Colors.transparent;
       _gridImages = List.filled(12, null);
       _huntingStartDate = null;
       _selectedIndex = 2;
     });
-    _saveColorBoards(); // Persist the updated list
-    _saveHuntingState(); // Persist the empty grid state after archiving
+    await _saveColorBoards(); // Persist the updated list
+    await _saveHuntingState(); // Persist the empty grid state after archiving
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(l10n.huntingSavedArchived)));
@@ -880,7 +963,9 @@ class _RootScreenState extends State<RootScreen> {
   Future<void> _deleteColorBoard(ColorBoard colorBoard) async {
     final l10n = AppLocalizations.of(context)!;
     setState(() {
-      _savedColorBoards.remove(colorBoard);
+      final updatedBoards = List<ColorBoard>.from(_savedColorBoards)
+        ..remove(colorBoard);
+      _savedColorBoards = _normalizeCollectionNumbers(updatedBoards).boards;
     });
     await _saveColorBoards();
 
@@ -907,8 +992,8 @@ class _RootScreenState extends State<RootScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.zero,
           ),
           title: Text(
             l10n.memoTitle,

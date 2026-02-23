@@ -37,6 +37,36 @@ class ArchiveDetailScreen extends StatefulWidget {
 class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
   final GlobalKey _cardKey = GlobalKey();
   late final AppLocalizations _l10n = lookupAppLocalizations(widget.locale);
+  late final List<ImageProvider?> _gridImageProviders;
+  Future<void>? _precacheFuture;
+  bool _didInitImageCache = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didInitImageCache) return;
+    _didInitImageCache = true;
+    _gridImageProviders = widget.colorBoard.gridImagePaths.map((path) {
+      if (path == null || path.isEmpty) return null;
+      final file = File(path);
+      if (!file.existsSync()) return null;
+      return FileImage(file);
+    }).toList(growable: false);
+    _precacheFuture = _precacheGridImages();
+  }
+
+  Future<void> _precacheGridImages() async {
+    final futures = <Future<void>>[];
+    for (final provider in _gridImageProviders) {
+      if (provider == null) continue;
+      futures.add(
+        precacheImage(provider, context).catchError((_) {
+          return;
+        }),
+      );
+    }
+    await Future.wait(futures);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -182,54 +212,67 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
           ),
           const SizedBox(height: 16),
 
-          // 콜라주 그리드
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: EdgeInsets.zero,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              childAspectRatio: 1.0,
-              crossAxisSpacing: 3,
-              mainAxisSpacing: 3,
-            ),
-            itemCount: 12,
-            itemBuilder: (context, index) {
-              final imagePath = widget.colorBoard.gridImagePaths[index];
-
-              return GestureDetector(
-                onTap: () {
-                  if (imagePath != null) {
-                    _showImageFullScreen(context, imagePath);
-                  }
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: imagePath == null
-                        ? Colors.grey.withOpacity(0.15)
-                        : null,
-                    image: imagePath != null
-                        ? DecorationImage(
-                            image: FileImage(File(imagePath)),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                  ),
-                  child: imagePath == null
-                      ? Center(
-                          child: Icon(
-                            Icons.add_photo_alternate_outlined,
-                            color: Colors.grey.withOpacity(0.3),
-                            size: 32,
-                          ),
-                        )
-                      : null,
-                ),
-              );
+          // 프리캐시가 끝난 뒤 한 번에 렌더링해서 깜빡임 감소
+          FutureBuilder<void>(
+            future: _precacheFuture,
+            builder: (context, snapshot) {
+              final ready =
+                  _precacheFuture == null ||
+                  snapshot.connectionState == ConnectionState.done ||
+                  snapshot.hasError;
+              return _buildImageGrid(context, ready: ready);
             },
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildImageGrid(BuildContext context, {required bool ready}) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 1.0,
+        crossAxisSpacing: 3,
+        mainAxisSpacing: 3,
+      ),
+      itemCount: 12,
+      itemBuilder: (context, index) {
+        final imagePath = widget.colorBoard.gridImagePaths[index];
+        final imageProvider = index < _gridImageProviders.length
+            ? _gridImageProviders[index]
+            : null;
+
+        if (imageProvider == null) {
+          return Container(
+            color: Colors.grey.withValues(alpha: 0.15),
+            child: Center(
+              child: Icon(
+                Icons.add_photo_alternate_outlined,
+                color: Colors.grey.withValues(alpha: 0.3),
+                size: 32,
+              ),
+            ),
+          );
+        }
+
+        if (!ready) {
+          return Container(color: Colors.grey.withValues(alpha: 0.18));
+        }
+
+        return GestureDetector(
+          onTap: imagePath == null ? null : () => _showImageFullScreen(context, imagePath),
+          child: Image(
+            image: imageProvider,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            filterQuality: FilterQuality.medium,
+          ),
+        );
+      },
     );
   }
 
@@ -257,7 +300,7 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: const Color(0xFFF5F5F5),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.zero,
           ),
           child: Text(
             widget.memo!,
@@ -441,10 +484,13 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
   }
 
   void _showImageFullScreen(BuildContext context, String imagePath) {
-    // 모든 이미지 경로를 가져오기 (null이 아닌 것만)
+    // 모든 이미지 경로를 가져오기 (존재하는 파일만)
     final List<String> validImagePaths = widget.colorBoard.gridImagePaths
         .whereType<String>()
+        .where((path) => path.isNotEmpty && File(path).existsSync())
         .toList();
+
+    if (validImagePaths.isEmpty) return;
 
     // 선택된 이미지의 인덱스 찾기
     final int initialIndex = validImagePaths.indexOf(imagePath);

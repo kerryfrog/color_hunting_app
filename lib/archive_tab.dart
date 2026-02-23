@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'l10n/app_localizations.dart';
-import 'main.dart'; // Import ColorBoard class
+
 import 'archive_detail_screen.dart';
+import 'l10n/app_localizations.dart';
+import 'main.dart';
 
 class ArchiveTab extends StatelessWidget {
   final List<ColorBoard> savedColorBoards;
   final Locale currentLocale;
-  final Function(ColorBoard) onSaveImagesToGallery; // New callback
-  final Function(ColorBoard) onDeleteColorBoard; // Delete callback
-  final VoidCallback? onNavigateToTarget; // New callback for navigation
+  final Function(ColorBoard) onSaveImagesToGallery;
+  final Function(ColorBoard) onDeleteColorBoard;
+  final VoidCallback? onNavigateToTarget;
 
   const ArchiveTab({
     super.key,
@@ -20,223 +21,271 @@ class ArchiveTab extends StatelessWidget {
     this.onNavigateToTarget,
   });
 
-  // 배경색과 대비되는 텍스트 색상 자동 선택
   Color _getContrastingTextColor(Color backgroundColor) {
-    // Calculate relative luminance
     final luminance = backgroundColor.computeLuminance();
-    // Return white for dark colors, black for light colors
     return luminance > 0.5 ? Colors.black : Colors.white;
   }
 
-  // RGB 값 추출
-  String _getRgbString(Color color) {
-    return 'RGB ${color.red}, ${color.green}, ${color.blue}';
+  String _getHexString(Color color) {
+    final rgb = color.toARGB32() & 0x00FFFFFF;
+    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
+  }
+
+  String _formatDate(ColorBoard colorBoard) {
+    final date = colorBoard.completedDate ?? colorBoard.createdDate;
+    if (date == null) return '';
+    return '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _getOrdinal(int number) {
+    final mod100 = number % 100;
+    if (mod100 >= 11 && mod100 <= 13) {
+      return '${number}th';
+    }
+    switch (number % 10) {
+      case 1:
+        return '${number}st';
+      case 2:
+        return '${number}nd';
+      case 3:
+        return '${number}rd';
+      default:
+        return '${number}th';
+    }
+  }
+
+  Color _getInnerSwatchColor(Color color) {
+    final luminance = color.computeLuminance();
+    return Color.lerp(color, Colors.white, luminance > 0.5 ? 0.35 : 0.22)!;
+  }
+
+  void _openDetail(BuildContext context, ColorBoard colorBoard) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ArchiveDetailScreen(
+          colorBoard: colorBoard,
+          locale: currentLocale,
+          huntingDate: colorBoard.completedDate ?? DateTime.now(),
+          memo: colorBoard.memo,
+          onDelete: () => onDeleteColorBoard(colorBoard),
+          onSaveCollage: () => onSaveImagesToGallery(colorBoard),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(AppLocalizations l10n) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFF5F5F7).withValues(alpha: 0.3),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.palette_outlined,
+                size: 60,
+                color: const Color(0xFFCCCCCC).withValues(alpha: 0.5),
+                weight: 0.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+          Text(
+            l10n.archiveEmptyTitle,
+            style: const TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+              color: Color(0xFF333333),
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            l10n.archiveEmptySubtitle,
+            style: const TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w300,
+              fontSize: 14,
+              color: Color(0xFF888888),
+              letterSpacing: -0.2,
+            ),
+          ),
+          const SizedBox(height: 48),
+          OutlinedButton(
+            onPressed: onNavigateToTarget,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF333333),
+              side: const BorderSide(color: Color(0xFF333333), width: 1),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+            ),
+            child: Text(
+              l10n.archiveStartHunting,
+              style: const TextStyle(
+                fontFamily: 'Pretendard',
+                fontWeight: FontWeight.w500,
+                fontSize: 15,
+                letterSpacing: -0.2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPosterTile({
+    required BuildContext context,
+    required ColorBoard colorBoard,
+    required int order,
+    required bool isTallTile,
+    required double width,
+    required double height,
+  }) {
+    final baseColor = colorBoard.targetColor;
+    final textColor = _getContrastingTextColor(baseColor);
+    final innerSwatch = _getInnerSwatchColor(baseColor);
+    final date = _formatDate(colorBoard);
+    final hex = _getHexString(baseColor).toUpperCase();
+    final collectionOrderLabel = '${_getOrdinal(order)} COLLECTION'.toUpperCase();
+    final dateLabel = date.toUpperCase();
+    final swatchSize = (width * 0.31).clamp(62.0, 96.0);
+    const textSize = 12.0;
+
+    return GestureDetector(
+      onTap: () => _openDetail(context, colorBoard),
+      child: Container(
+        width: width,
+        height: height,
+        color: baseColor,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Spacer(flex: 8),
+            Container(
+              width: swatchSize,
+              height: swatchSize,
+              decoration: BoxDecoration(
+                color: innerSwatch,
+                border: Border.all(
+                  color: textColor.withValues(alpha: 0.08),
+                  width: 1,
+                ),
+              ),
+            ),
+            SizedBox(height: isTallTile ? 8 : 16),
+            Text(
+              hex,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.balthazar(
+                fontWeight: FontWeight.w400,
+                fontSize: textSize,
+                height: 1.08,
+                color: textColor,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              collectionOrderLabel,
+              style: GoogleFonts.balthazar(
+                fontWeight: FontWeight.w400,
+                fontSize: textSize,
+                height: 1.08,
+                color: textColor.withValues(alpha: 0.92),
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              dateLabel,
+              style: GoogleFonts.balthazar(
+                fontWeight: FontWeight.w400,
+                fontSize: textSize,
+                height: 1.08,
+                color: textColor.withValues(alpha: 0.85),
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = lookupAppLocalizations(currentLocale);
-    // 종료일 기준 최신순 정렬 (없으면 생성일로 fallback)
     final sortedBoards = List<ColorBoard>.from(savedColorBoards)
       ..sort((a, b) {
         final dateA = a.completedDate ?? a.createdDate ?? DateTime(1970);
         final dateB = b.completedDate ?? b.createdDate ?? DateTime(1970);
-        return dateB.compareTo(dateA); // 내림차순 (최신순)
+        return dateB.compareTo(dateA);
       });
 
     return Scaffold(
-      backgroundColor: Colors.white, // 순백 배경으로 컬러칩 강조
+      backgroundColor: Colors.white,
       body: sortedBoards.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Minimalist palette icon with thin lines
-                  Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFFF5F5F7).withOpacity(0.3),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.palette_outlined,
-                        size: 60,
-                        color: const Color(0xFFCCCCCC).withOpacity(0.5),
-                        weight: 0.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  // Main message
-                  Text(
-                    l10n.archiveEmptyTitle,
-                    style: const TextStyle(
-                      fontFamily: 'Pretendard',
-                      fontWeight: FontWeight.w700,
-                      fontSize: 18,
-                      color: Color(0xFF333333),
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Subtitle
-                  Text(
-                    l10n.archiveEmptySubtitle,
-                    style: const TextStyle(
-                      fontFamily: 'Pretendard',
-                      fontWeight: FontWeight.w300,
-                      fontSize: 14,
-                      color: Color(0xFF888888),
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                  const SizedBox(height: 48),
-                  // CTA Button
-                  OutlinedButton(
-                    onPressed: onNavigateToTarget,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF333333),
-                      side: const BorderSide(
-                        color: Color(0xFF333333),
-                        width: 1,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 14,
-                      ),
-                    ),
-                    child: Text(
-                      l10n.archiveStartHunting,
-                      style: const TextStyle(
-                        fontFamily: 'Pretendard',
-                        fontWeight: FontWeight.w500,
-                        fontSize: 15,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
+          ? _buildEmptyState(l10n)
           : LayoutBuilder(
               builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                final columnWidth = (width - 1) / 2; // 1px gap
+                final columnWidth = constraints.maxWidth / 2;
+                const bigRatio = 1.5;
+                const smallRatio = 1.0;
 
-                // 2개 컬럼으로 분리
                 final leftColumn = <Widget>[];
                 final rightColumn = <Widget>[];
 
                 for (int i = 0; i < sortedBoards.length; i++) {
-                  final colorBoard = sortedBoards[i];
-                  final hexColor =
-                      '#${colorBoard.targetColor.value.toRadixString(16).substring(2).toUpperCase()}';
-                  final rgbColor = _getRgbString(colorBoard.targetColor);
-                  final textColor = _getContrastingTextColor(
-                    colorBoard.targetColor,
-                  );
+                  final board = sortedBoards[i];
+                  final group = i ~/ 5;
+                  final positionInGroup = i % 5;
+                  final isReversedGroup = group.isOdd;
 
-                  // 블록 높이 (세로로 긴 직사각형)
-                  final blockHeight = columnWidth * 1.3;
+                  final placeLeft = isReversedGroup
+                      ? (positionInGroup == 0 ||
+                            positionInGroup == 2 ||
+                            positionInGroup == 4)
+                      : (positionInGroup == 0 || positionInGroup == 3);
 
-                  // 날짜 포맷팅
-                  String dateString = '';
-                  if (colorBoard.completedDate != null) {
-                    final date = colorBoard.completedDate!;
-                    dateString =
-                        '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
-                  }
+                  final leftRatio = isReversedGroup ? smallRatio : bigRatio;
+                  final rightRatio = isReversedGroup ? bigRatio : smallRatio;
+                  final ratio = placeLeft ? leftRatio : rightRatio;
 
-                  final colorBlock = GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ArchiveDetailScreen(
-                            colorBoard: colorBoard,
-                            locale: currentLocale,
-                            huntingDate:
-                                colorBoard.completedDate ?? DateTime.now(),
-                            memo: colorBoard.memo,
-                            onDelete: () => onDeleteColorBoard(colorBoard),
-                            onSaveCollage: () =>
-                                onSaveImagesToGallery(colorBoard),
-                          ),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      width: columnWidth,
-                      height: blockHeight,
-                      decoration: BoxDecoration(
-                        color: colorBoard.targetColor, // 타겟 컬러 100% 농도
+                  if (placeLeft) {
+                    leftColumn.add(
+                      _buildPosterTile(
+                        context: context,
+                        colorBoard: board,
+                        order: board.collectionNumber,
+                        isTallTile: ratio > 1.2,
+                        width: columnWidth,
+                        height: columnWidth * ratio,
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            // 상단: 날짜 (색상 이름 역할)
-                            if (dateString.isNotEmpty)
-                              Text(
-                                dateString,
-                                style: GoogleFonts.lora(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 20,
-                                  color: textColor,
-                                  letterSpacing: -0.5,
-                                  height: 1.2,
-                                ),
-                              ),
-
-                            // 하단: HEX & RGB
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  hexColor,
-                                  style: GoogleFonts.lora(
-                                    fontWeight: FontWeight.w300,
-                                    fontSize: 13,
-                                    color: textColor.withOpacity(0.9),
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  rgbColor,
-                                  style: GoogleFonts.lora(
-                                    fontWeight: FontWeight.w300,
-                                    fontSize: 11,
-                                    color: textColor.withOpacity(0.7),
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-
-                  // 교대로 왼쪽/오른쪽 컬럼에 배치
-                  if (i % 2 == 0) {
-                    leftColumn.add(colorBlock);
-                    if (i < sortedBoards.length - 1) {
-                      leftColumn.add(const SizedBox(height: 1));
-                    }
+                    );
                   } else {
-                    rightColumn.add(colorBlock);
-                    if (i < sortedBoards.length - 1) {
-                      rightColumn.add(const SizedBox(height: 1));
-                    }
+                    rightColumn.add(
+                      _buildPosterTile(
+                        context: context,
+                        colorBoard: board,
+                        order: board.collectionNumber,
+                        isTallTile: ratio > 1.2,
+                        width: columnWidth,
+                        height: columnWidth * ratio,
+                      ),
+                    );
                   }
                 }
 
@@ -244,9 +293,14 @@ class ArchiveTab extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: Column(children: leftColumn)),
-                      const SizedBox(width: 1),
-                      Expanded(child: Column(children: rightColumn)),
+                      SizedBox(
+                        width: columnWidth,
+                        child: Column(children: leftColumn),
+                      ),
+                      SizedBox(
+                        width: columnWidth,
+                        child: Column(children: rightColumn),
+                      ),
                     ],
                   ),
                 );
