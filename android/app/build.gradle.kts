@@ -14,6 +14,17 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+}
+
+val testAdmobAndroidAppId = "ca-app-pub-3940256099942544~3347511713"
+val releaseAdmobAndroidAppId =
+    localProperties.getProperty("admob.android.app.id.release")
+        ?: testAdmobAndroidAppId
+
 android {
     namespace = "com.kerryfrog.colorhuntingapp"
     compileSdk = flutter.compileSdkVersion
@@ -51,10 +62,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders["admobAppId"] = testAdmobAndroidAppId
+        }
         release {
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
+            manifestPlaceholders["admobAppId"] = releaseAdmobAndroidAppId
         }
     }
 }
