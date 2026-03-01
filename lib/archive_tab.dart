@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:ui';
 
 import 'archive_detail_screen.dart';
 import 'l10n/app_localizations.dart';
@@ -20,11 +21,6 @@ class ArchiveTab extends StatelessWidget {
     required this.onDeleteColorBoard,
     this.onNavigateToTarget,
   });
-
-  Color _getContrastingTextColor(Color backgroundColor) {
-    final luminance = backgroundColor.computeLuminance();
-    return luminance > 0.5 ? Colors.black : Colors.white;
-  }
 
   String _getHexString(Color color) {
     final rgb = color.toARGB32() & 0x00FFFFFF;
@@ -52,11 +48,6 @@ class ArchiveTab extends StatelessWidget {
       default:
         return '${number}th';
     }
-  }
-
-  Color _getInnerSwatchColor(Color color) {
-    final luminance = color.computeLuminance();
-    return Color.lerp(color, Colors.white, luminance > 0.5 ? 0.35 : 0.22)!;
   }
 
   void _openDetail(BuildContext context, ColorBoard colorBoard) {
@@ -144,82 +135,175 @@ class ArchiveTab extends StatelessWidget {
     );
   }
 
+  Color _tone(
+    Color color, {
+    double saturation = 1.0,
+    double lightness = 1.0,
+    double alpha = 1.0,
+  }) {
+    final hsl = HSLColor.fromColor(color);
+    final tuned = hsl
+        .withSaturation((hsl.saturation * saturation).clamp(0.05, 1.0))
+        .withLightness((hsl.lightness * lightness).clamp(0.05, 0.92))
+        .toColor();
+    return tuned.withValues(alpha: alpha);
+  }
+
+  Widget _buildBlurredBlob({
+    required double width,
+    required double height,
+    required List<Color> colors,
+    required List<double> stops,
+    double sigma = 14,
+  }) {
+    return ImageFiltered(
+      imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(width),
+          gradient: RadialGradient(
+            center: const Alignment(0, -0.14),
+            radius: 1.0,
+            colors: colors,
+            stops: stops,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPosterTile({
     required BuildContext context,
     required ColorBoard colorBoard,
     required int order,
-    required bool isTallTile,
-    required double width,
-    required double height,
   }) {
     final baseColor = colorBoard.targetColor;
-    final textColor = _getContrastingTextColor(baseColor);
-    final innerSwatch = _getInnerSwatchColor(baseColor);
     final date = _formatDate(colorBoard);
     final hex = _getHexString(baseColor).toUpperCase();
     final collectionOrderLabel = '${_getOrdinal(order)} COLLECTION'.toUpperCase();
     final dateLabel = date.toUpperCase();
-    final swatchSize = (width * 0.31).clamp(62.0, 96.0);
+    final coreColor = _tone(
+      baseColor,
+      saturation: 1.2,
+      lightness: 0.6,
+      alpha: 1.0,
+    );
+    final hazeColor = _tone(
+      baseColor,
+      saturation: 0.72,
+      lightness: 1.15,
+      alpha: 1.0,
+    );
     const textSize = 12.0;
+    const titleSize = 13.0;
 
     return GestureDetector(
       onTap: () => _openDetail(context, colorBoard),
       child: Container(
-        width: width,
-        height: height,
-        color: baseColor,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Spacer(flex: 8),
-            Container(
-              width: swatchSize,
-              height: swatchSize,
-              decoration: BoxDecoration(
-                color: innerSwatch,
-                border: Border.all(
-                  color: textColor.withValues(alpha: 0.08),
-                  width: 1,
-                ),
-              ),
-            ),
-            SizedBox(height: isTallTile ? 8 : 16),
-            Text(
-              hex,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.balthazar(
-                fontWeight: FontWeight.w400,
-                fontSize: textSize,
-                height: 1.08,
-                color: textColor,
-                letterSpacing: 0.2,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              collectionOrderLabel,
-              style: GoogleFonts.balthazar(
-                fontWeight: FontWeight.w400,
-                fontSize: textSize,
-                height: 1.08,
-                color: textColor.withValues(alpha: 0.92),
-                letterSpacing: 0.2,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              dateLabel,
-              style: GoogleFonts.balthazar(
-                fontWeight: FontWeight.w400,
-                fontSize: textSize,
-                height: 1.08,
-                color: textColor.withValues(alpha: 0.85),
-                letterSpacing: 0.2,
-              ),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8F7F3),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE5E2D9), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
             ),
           ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(15),
+          child: Stack(
+            children: [
+              Align(
+                alignment: const Alignment(0.28, 0),
+                child: IgnorePointer(
+                  child: SizedBox(
+                    width: 216,
+                    height: 252,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Transform.translate(
+                          offset: const Offset(0, -64),
+                          child: _buildBlurredBlob(
+                            width: 170,
+                            height: 182,
+                            sigma: 18,
+                            colors: [
+                              coreColor.withValues(alpha: 0.72),
+                              hazeColor.withValues(alpha: 0.22),
+                              Colors.transparent,
+                            ],
+                            stops: const [0.0, 0.62, 1.0],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      collectionOrderLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.balthazar(
+                                fontWeight: FontWeight.w400,
+                                fontSize: titleSize,
+                                height: 1.08,
+                                color: const Color(0xFF333333),
+                                letterSpacing: 0.2,
+                                fontFeatures: const [
+                                  FontFeature.enable('lnum'),
+                                  FontFeature.enable('tnum'),
+                                ],
+                              ),
+                            ),
+                    const SizedBox(height: 3),
+                    Text(
+                      dateLabel,
+                              style: GoogleFonts.balthazar(
+                                fontWeight: FontWeight.w400,
+                                fontSize: textSize,
+                                height: 1.08,
+                                color: const Color(0xFF777777),
+                                letterSpacing: 0.2,
+                                fontFeatures: const [
+                                  FontFeature.enable('lnum'),
+                                  FontFeature.enable('tnum'),
+                                ],
+                              ),
+                            ),
+                    const Spacer(),
+                    Text(
+                      hex,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.spectral(
+                                fontWeight: FontWeight.w400,
+                                fontSize: 11,
+                                height: 1.0,
+                                color: baseColor,
+                                letterSpacing: 0.2,
+                                fontFeatures: const [
+                                  FontFeature.enable('lnum'),
+                                  FontFeature.enable('tnum'),
+                                ],
+                              ),
+                            ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -236,73 +320,24 @@ class ArchiveTab extends StatelessWidget {
       });
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFFCFCFA),
       body: sortedBoards.isEmpty
           ? _buildEmptyState(l10n)
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final columnWidth = constraints.maxWidth / 2;
-                const bigRatio = 1.5;
-                const smallRatio = 1.0;
-
-                final leftColumn = <Widget>[];
-                final rightColumn = <Widget>[];
-
-                for (int i = 0; i < sortedBoards.length; i++) {
-                  final board = sortedBoards[i];
-                  final group = i ~/ 5;
-                  final positionInGroup = i % 5;
-                  final isReversedGroup = group.isOdd;
-
-                  final placeLeft = isReversedGroup
-                      ? (positionInGroup == 0 ||
-                            positionInGroup == 2 ||
-                            positionInGroup == 4)
-                      : (positionInGroup == 0 || positionInGroup == 3);
-
-                  final leftRatio = isReversedGroup ? smallRatio : bigRatio;
-                  final rightRatio = isReversedGroup ? bigRatio : smallRatio;
-                  final ratio = placeLeft ? leftRatio : rightRatio;
-
-                  if (placeLeft) {
-                    leftColumn.add(
-                      _buildPosterTile(
-                        context: context,
-                        colorBoard: board,
-                        order: board.collectionNumber,
-                        isTallTile: ratio > 1.2,
-                        width: columnWidth,
-                        height: columnWidth * ratio,
-                      ),
-                    );
-                  } else {
-                    rightColumn.add(
-                      _buildPosterTile(
-                        context: context,
-                        colorBoard: board,
-                        order: board.collectionNumber,
-                        isTallTile: ratio > 1.2,
-                        width: columnWidth,
-                        height: columnWidth * ratio,
-                      ),
-                    );
-                  }
-                }
-
-                return SingleChildScrollView(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: columnWidth,
-                        child: Column(children: leftColumn),
-                      ),
-                      SizedBox(
-                        width: columnWidth,
-                        child: Column(children: rightColumn),
-                      ),
-                    ],
-                  ),
+          : GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.72,
+              ),
+              itemCount: sortedBoards.length,
+              itemBuilder: (context, index) {
+                final board = sortedBoards[index];
+                return _buildPosterTile(
+                  context: context,
+                  colorBoard: board,
+                  order: board.collectionNumber,
                 );
               },
             ),

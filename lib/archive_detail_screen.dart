@@ -74,41 +74,36 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
       context: context,
       locale: widget.locale,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFFCFCFA),
         body: SafeArea(
           child: Column(
             children: [
-              // 상단바
               _buildAppBar(context),
 
-              // 스크롤 가능한 메인 콘텐츠
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const SizedBox(height: 16),
 
-                      // 메인 콜라주 (카드 전체 캡처를 위한 RepaintBoundary)
                       RepaintBoundary(
                         key: _cardKey,
                         child: _buildCollageGrid(context),
                       ),
 
-                      // 메모 섹션 (메모가 있을 때만 표시)
                       if (widget.memo != null && widget.memo!.isNotEmpty) ...[
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 24),
                         _buildMemoSection(context),
                       ],
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
               ),
 
-              // 하단 버튼 영역
               _buildBottomActions(context),
             ],
           ),
@@ -119,35 +114,31 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
 
   Widget _buildAppBar(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(color: Colors.white),
+      decoration: const BoxDecoration(color: Color(0xFFFCFCFA)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // 뒤로가기 버튼
-            IconButton(
+            _buildTopIconButton(
               onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.arrow_back_ios, size: 20),
-              color: const Color(0xFF333333),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
+              child: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                size: 18,
+                color: Color(0xFF333333),
+              ),
             ),
-
-            // 삭제 버튼
-            IconButton(
+            _buildTopIconButton(
               onPressed: () => _showDeleteDialog(context),
-              icon: SvgPicture.asset(
+              child: SvgPicture.asset(
                 'assets/images/trash-can.svg',
-                width: 20,
-                height: 20,
+                width: 18,
+                height: 18,
                 colorFilter: const ColorFilter.mode(
                   Color(0xFF333333),
                   BlendMode.srcIn,
                 ),
               ),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
             ),
           ],
         ),
@@ -155,77 +146,274 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
     );
   }
 
+  Widget _buildTopIconButton({
+    required VoidCallback onPressed,
+    required Widget child,
+  }) {
+    return Material(
+      color: const Color(0xFFF8F7F3),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFFE5E2D9), width: 1),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onPressed,
+        child: SizedBox(
+          width: 38,
+          height: 38,
+          child: Center(child: child),
+        ),
+      ),
+    );
+  }
+
+  Color _tone(
+    Color color, {
+    double saturation = 1.0,
+    double lightness = 1.0,
+    double alpha = 1.0,
+  }) {
+    final hsl = HSLColor.fromColor(color);
+    final tuned = hsl
+        .withSaturation((hsl.saturation * saturation).clamp(0.05, 1.0))
+        .withLightness((hsl.lightness * lightness).clamp(0.05, 0.92))
+        .toColor();
+    return tuned.withValues(alpha: alpha);
+  }
+
+  Widget _buildTopLeftBlurAccent({
+    required Color baseColor,
+  }) {
+    final core = _tone(baseColor, saturation: 1.16, lightness: 0.66, alpha: 1.0);
+    final haze = _tone(baseColor, saturation: 0.74, lightness: 1.12, alpha: 1.0);
+
+    return Positioned(
+      left: -34,
+      top: -46,
+      child: IgnorePointer(
+        child: ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            width: 192,
+            height: 176,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(200),
+              gradient: RadialGradient(
+                center: const Alignment(-0.24, -0.24),
+                radius: 1.0,
+                colors: [
+                  core.withValues(alpha: 0.74),
+                  haze.withValues(alpha: 0.2),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.62, 1.0],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomRightBlurAccent({
+    required Color baseColor,
+  }) {
+    final core = _tone(baseColor, saturation: 1.08, lightness: 0.7, alpha: 1.0);
+    final haze = _tone(baseColor, saturation: 0.7, lightness: 1.1, alpha: 1.0);
+
+    return Positioned(
+      right: -38,
+      bottom: -52,
+      child: IgnorePointer(
+        child: ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            width: 178,
+            height: 164,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(190),
+              gradient: RadialGradient(
+                center: const Alignment(0.28, 0.28),
+                radius: 1.0,
+                colors: [
+                  core.withValues(alpha: 0.56),
+                  haze.withValues(alpha: 0.16),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.58, 1.0],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getOrdinal(int number) {
+    final mod100 = number % 100;
+    if (mod100 >= 11 && mod100 <= 13) {
+      return '${number}th';
+    }
+    switch (number % 10) {
+      case 1:
+        return '${number}st';
+      case 2:
+        return '${number}nd';
+      case 3:
+        return '${number}rd';
+      default:
+        return '${number}th';
+    }
+  }
+
+  String get _shareLabel => switch (widget.locale.languageCode) {
+    'ko' => '공유',
+    'ja' => '共有',
+    'zh' => '分享',
+    _ => 'Share',
+  };
+
   Widget _buildCollageGrid(BuildContext context) {
+    final baseColor = widget.colorBoard.targetColor;
     final dateString = DateFormat('yyyy.MM.dd').format(widget.huntingDate);
     final hexColor =
-        '#${widget.colorBoard.targetColor.value.toRadixString(16).substring(2).toUpperCase()}';
-
-    // 틴팅된 배경색
-    final cardBackgroundColor = Color.lerp(
-      Colors.white,
-      widget.colorBoard.targetColor,
-      0.07,
-    )!;
+        '#${baseColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+    final collectionLabel =
+        '${_getOrdinal(widget.colorBoard.collectionNumber).toUpperCase()} COLLECTION';
+    const titleColor = Color(0xFF2F2F2F);
+    const subtitleColor = Color(0xFF4A4A4A);
+    final datePillBackground = Colors.white.withValues(alpha: 0.44);
+    const datePillBorder = Color(0xFFE6E3D9);
 
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: cardBackgroundColor),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 색상 알약 + 날짜
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: widget.colorBoard.targetColor,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  hexColor,
-                  style: GoogleFonts.lora(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    color:
-                        widget.colorBoard.targetColor.computeLuminance() > 0.5
-                        ? const Color(0xFF333333)
-                        : Colors.white,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-              ),
-              Text(
-                dateString,
-                style: GoogleFonts.lora(
-                  fontWeight: FontWeight.w300,
-                  fontSize: 13,
-                  color: Color(0xFF999999),
-                  letterSpacing: -0.2,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // 프리캐시가 끝난 뒤 한 번에 렌더링해서 깜빡임 감소
-          FutureBuilder<void>(
-            future: _precacheFuture,
-            builder: (context, snapshot) {
-              final ready =
-                  _precacheFuture == null ||
-                  snapshot.connectionState == ConnectionState.done ||
-                  snapshot.hasError;
-              return _buildImageGrid(context, ready: ready);
-            },
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F7F3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFFE5E2D9),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(19),
+        child: Stack(
+          children: [
+            _buildTopLeftBlurAccent(baseColor: baseColor),
+            _buildBottomRightBlurAccent(baseColor: baseColor),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              collectionLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.balthazar(
+                                fontWeight: FontWeight.w400,
+                                fontSize: 12,
+                                height: 1.08,
+                                color: subtitleColor,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              hexColor,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.spectral(
+                                fontWeight: FontWeight.w400,
+                                fontSize: 16,
+                                height: 1.0,
+                                color: titleColor,
+                                letterSpacing: 0.4,
+                                fontFeatures: const [
+                                  FontFeature.enable('lnum'),
+                                  FontFeature.enable('tnum'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: datePillBackground,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: datePillBorder,
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          dateString,
+                          style: GoogleFonts.lora(
+                            fontWeight: FontWeight.w400,
+                            fontSize: 12,
+                            color: subtitleColor,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF7F5F0),
+                      borderRadius: BorderRadius.zero,
+                      border: Border.all(
+                        color: const Color(0xFFE3E0D6),
+                        width: 1,
+                      ),
+                    ),
+                    child: FutureBuilder<void>(
+                      future: _precacheFuture,
+                      builder: (context, snapshot) {
+                        final ready =
+                            _precacheFuture == null ||
+                            snapshot.connectionState == ConnectionState.done ||
+                            snapshot.hasError;
+                        return _buildImageGrid(context, ready: ready);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
+  }
+
+  Widget _buildImageTile({
+    required Widget child,
+    VoidCallback? onTap,
+  }) {
+    if (onTap == null) return child;
+    return GestureDetector(onTap: onTap, child: child);
   }
 
   Widget _buildImageGrid(BuildContext context, {required bool ready}) {
@@ -236,8 +424,8 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
         childAspectRatio: 1.0,
-        crossAxisSpacing: 3,
-        mainAxisSpacing: 3,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
       ),
       itemCount: 12,
       itemBuilder: (context, index) {
@@ -247,24 +435,30 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
             : null;
 
         if (imageProvider == null) {
-          return Container(
-            color: Colors.grey.withValues(alpha: 0.15),
-            child: Center(
-              child: Icon(
-                Icons.add_photo_alternate_outlined,
-                color: Colors.grey.withValues(alpha: 0.3),
-                size: 32,
+          return _buildImageTile(
+            child: Container(
+              color: const Color(0xFFECEAE3),
+              child: Center(
+                child: Icon(
+                  Icons.add_photo_alternate_outlined,
+                  color: const Color(0xFFBBB8AF).withValues(alpha: 0.9),
+                  size: 28,
+                ),
               ),
             ),
           );
         }
 
         if (!ready) {
-          return Container(color: Colors.grey.withValues(alpha: 0.18));
+          return _buildImageTile(
+            child: Container(color: const Color(0xFFE5E3DC)),
+          );
         }
 
-        return GestureDetector(
-          onTap: imagePath == null ? null : () => _showImageFullScreen(context, imagePath),
+        return _buildImageTile(
+          onTap: imagePath == null
+              ? null
+              : () => _showImageFullScreen(context, imagePath),
           child: Image(
             image: imageProvider,
             fit: BoxFit.cover,
@@ -280,37 +474,33 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 타이틀
         Text(
           _l10n.memoTitle,
-          style: const TextStyle(
-            fontFamily: 'Pretendard',
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
-            color: Color(0xFF333333),
-            letterSpacing: -0.3,
+          style: GoogleFonts.balthazar(
+            fontWeight: FontWeight.w400,
+            fontSize: 14,
+            color: const Color(0xFF444444),
+            letterSpacing: 0.2,
           ),
         ),
-
-        const SizedBox(height: 12),
-
-        // 메모 박스
+        const SizedBox(height: 10),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: const Color(0xFFF5F5F5),
-            borderRadius: BorderRadius.zero,
+            color: const Color(0xFFF8F7F3),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE5E2D9), width: 1),
           ),
           child: Text(
             widget.memo!,
             style: const TextStyle(
               fontFamily: 'Pretendard',
-              fontWeight: FontWeight.w300,
+              fontWeight: FontWeight.w400,
               fontSize: 14,
-              color: Color(0xFF333333),
-              height: 1.6,
-              letterSpacing: -0.2,
+              color: Color(0xFF3A3A3A),
+              height: 1.55,
+              letterSpacing: -0.1,
             ),
           ),
         ),
@@ -318,103 +508,88 @@ class _ArchiveDetailScreenState extends State<ArchiveDetailScreen> {
     );
   }
 
-  Widget _buildBottomActions(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
-        border: Border(
-          top: BorderSide(color: Colors.grey.withOpacity(0.1), width: 1),
+  Widget _buildActionButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+    bool emphasize = false,
+  }) {
+    final accent = widget.colorBoard.targetColor;
+    final foreground = emphasize ? const Color(0xFF2F2F2F) : const Color(0xFF3A3A3A);
+    final background = emphasize
+        ? accent.withValues(alpha: 0.16)
+        : const Color(0xFFF8F7F3);
+    final borderColor = emphasize
+        ? accent.withValues(alpha: 0.38)
+        : const Color(0xFFE5E2D9);
+
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: foreground,
+        backgroundColor: background,
+        side: BorderSide(color: borderColor, width: 1),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
+      ),
+      icon: Icon(icon, size: 18, color: foreground),
+      label: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: 'Pretendard',
+          fontWeight: FontWeight.w500,
+          fontSize: 14,
+          letterSpacing: -0.1,
         ),
       ),
-      child: Row(
+    );
+  }
+
+  Widget _buildBottomActions(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFCFCFA).withValues(alpha: 0.94),
+        border: Border(
+          top: BorderSide(
+            color: const Color(0xFFE5E2D9).withValues(alpha: 0.7),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // 공유 아이콘 버튼
-          OutlinedButton(
-            onPressed: () {
-              _shareToInstagram(context);
-            },
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF333333),
-              side: const BorderSide(color: Color(0xFFE0E0E0), width: 1),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            ),
-            child: const Icon(
-              Icons.share_outlined,
-              size: 20,
-              color: Color(0xFF333333),
+          SizedBox(
+            width: double.infinity,
+            child: _buildActionButton(
+              onPressed: () => _shareToInstagram(context),
+              icon: Icons.share_outlined,
+              label: _shareLabel,
+              emphasize: true,
             ),
           ),
-
-          const SizedBox(width: 12),
-
-          // 콜라주만 저장 버튼
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () {
-                _saveCollage(context);
-              },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF333333),
-                side: const BorderSide(color: Color(0xFFE0E0E0), width: 1),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              icon: const Icon(
-                Icons.download_outlined,
-                size: 18,
-                color: Color(0xFF333333),
-              ),
-              label: Text(
-                _l10n.downloadCollageLabel,
-                style: const TextStyle(
-                  fontFamily: 'Pretendard',
-                  fontWeight: FontWeight.w500,
-                  fontSize: 15,
-                  color: Color(0xFF333333),
-                  letterSpacing: -0.2,
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionButton(
+                  onPressed: () => _saveCollage(context),
+                  icon: Icons.download_outlined,
+                  label: _l10n.downloadCollageLabel,
                 ),
               ),
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // 카드 전체 저장 버튼
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () {
-                _saveCardAsImage(context);
-              },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF333333),
-                side: const BorderSide(color: Color(0xFFE0E0E0), width: 1),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              icon: const Icon(
-                Icons.download_outlined,
-                size: 18,
-                color: Color(0xFF333333),
-              ),
-              label: Text(
-                _l10n.downloadCardLabel,
-                style: const TextStyle(
-                  fontFamily: 'Pretendard',
-                  fontWeight: FontWeight.w500,
-                  fontSize: 15,
-                  color: Color(0xFF333333),
-                  letterSpacing: -0.2,
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildActionButton(
+                  onPressed: () => _saveCardAsImage(context),
+                  icon: Icons.download_outlined,
+                  label: _l10n.downloadCardLabel,
                 ),
               ),
-            ),
+            ],
           ),
         ],
       ),
