@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert'; // For JSON encoding/decoding
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 import 'package:camera/camera.dart';
@@ -10,7 +11,6 @@ import 'package:gal/gal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image/image.dart' as img; // Import as img to avoid conflicts
 import 'package:path_provider/path_provider.dart'; // Import for temporary directory
-import 'dart:typed_data'; // Import for Uint8List
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'camera_screen.dart';
@@ -208,11 +208,26 @@ class _RootScreenState extends State<RootScreen> {
       'ca-app-pub-2881048601217100/8080604602';
   static const String _kTestRewardedAdUnitId =
       'ca-app-pub-3940256099942544/5224354917';
+  static const String _kIosExitModalAdUnitId =
+      'ca-app-pub-2881048601217100/1963802712';
+  static const String _kAndroidExitModalAdUnitId =
+      'ca-app-pub-2881048601217100/3332724700';
+  static const String _kTestExitModalBannerAdUnitId =
+      'ca-app-pub-3940256099942544/6300978111';
 
   String get _rewardedAdUnitId =>
       Platform.isIOS ? _kIosRewardedAdUnitId : _kTestRewardedAdUnitId;
+  String get _exitModalBannerAdUnitId {
+    if (Platform.isIOS) return _kIosExitModalAdUnitId;
+    if (Platform.isAndroid) return _kAndroidExitModalAdUnitId;
+    return _kTestExitModalBannerAdUnitId;
+  }
 
   Future<void>? _mobileAdsInitializeFuture;
+  bool _isHandlingExitRequest = false;
+  int? _iosEdgeSwipePointer;
+  Offset? _iosEdgeSwipeStart;
+  bool _iosEdgeSwipeTriggered = false;
 
   Locale get _currentLocale => switch (_appLanguage) {
     AppLanguage.ko => const Locale('ko'),
@@ -582,6 +597,255 @@ class _RootScreenState extends State<RootScreen> {
     }
 
     return unlocked;
+  }
+
+  Future<void> _handleExitRequest() async {
+    if (_isHandlingExitRequest) return;
+    _isHandlingExitRequest = true;
+    try {
+      final shouldExit = await _showExitConfirmDialog();
+      if (shouldExit != true) return;
+      await _closeApp();
+    } finally {
+      _isHandlingExitRequest = false;
+    }
+  }
+
+  Future<void> _closeApp() async {
+    if (!Platform.isIOS) {
+      await SystemNavigator.pop();
+      return;
+    }
+
+    // iOS may ignore SystemNavigator.pop on a root Flutter view.
+    try {
+      await SystemChannels.platform.invokeMethod<void>('SystemNavigator.pop');
+    } catch (_) {}
+
+    await Future.delayed(const Duration(milliseconds: 120));
+    exit(0);
+  }
+
+  void _resetIosEdgeSwipeTracking() {
+    _iosEdgeSwipePointer = null;
+    _iosEdgeSwipeStart = null;
+    _iosEdgeSwipeTriggered = false;
+  }
+
+  void _onIosEdgeSwipePointerDown(PointerDownEvent event) {
+    if (!Platform.isIOS) return;
+    if (_iosEdgeSwipePointer != null) return;
+    if (event.position.dx > 24) return;
+    _iosEdgeSwipePointer = event.pointer;
+    _iosEdgeSwipeStart = event.position;
+    _iosEdgeSwipeTriggered = false;
+  }
+
+  void _onIosEdgeSwipePointerMove(PointerMoveEvent event) {
+    if (!Platform.isIOS) return;
+    if (_iosEdgeSwipePointer != event.pointer) return;
+    if (_iosEdgeSwipeTriggered) return;
+    final start = _iosEdgeSwipeStart;
+    if (start == null) return;
+
+    final delta = event.position - start;
+    if (delta.dx > 72 && delta.dy.abs() < 48) {
+      final navigator = Navigator.maybeOf(context);
+      if ((navigator?.canPop() ?? false) || _isHandlingExitRequest) {
+        _resetIosEdgeSwipeTracking();
+        return;
+      }
+      _iosEdgeSwipeTriggered = true;
+      _handleExitRequest();
+    }
+  }
+
+  Future<bool?> _showExitConfirmDialog() async {
+    final bool isAdsReady = await _ensureMobileAdsInitialized();
+    if (!mounted) return false;
+
+    BannerAd? exitModalBanner;
+    final isBannerLoaded = ValueNotifier<bool>(false);
+    final isBannerFailed = ValueNotifier<bool>(false);
+    bool dialogActive = true;
+
+    if (isAdsReady) {
+      exitModalBanner = BannerAd(
+        adUnitId: _exitModalBannerAdUnitId,
+        size: AdSize.mediumRectangle,
+        request: const AdRequest(),
+        listener: BannerAdListener(
+          onAdLoaded: (_) {
+            if (!dialogActive) return;
+            isBannerLoaded.value = true;
+            isBannerFailed.value = false;
+          },
+          onAdFailedToLoad: (ad, error) {
+            ad.dispose();
+            if (!dialogActive) return;
+            isBannerFailed.value = true;
+          },
+        ),
+      )..load();
+
+      // Prevent endless spinner in case ad load hangs on some devices/networks.
+      Future.delayed(const Duration(seconds: 4), () {
+        if (!dialogActive) return;
+        if (!isBannerLoaded.value) {
+          isBannerFailed.value = true;
+        }
+      });
+    }
+
+    final localeCode = _currentLocale.languageCode;
+    final title = switch (localeCode) {
+      'en' => 'Exit App',
+      'ja' => 'アプリを終了',
+      'zh' => '退出应用',
+      _ => '앱 종료',
+    };
+    final cancelText = switch (localeCode) {
+      'en' => 'Cancel',
+      'ja' => 'キャンセル',
+      'zh' => '取消',
+      _ => '취소',
+    };
+    final exitText = switch (localeCode) {
+      'en' => 'Exit',
+      'ja' => '終了',
+      'zh' => '退出',
+      _ => '종료',
+    };
+    final adFailedText = switch (localeCode) {
+      'en' => 'Failed to load ad.',
+      'ja' => '広告を読み込めませんでした。',
+      'zh' => '广告加载失败。',
+      _ => '광고를 불러오지 못했습니다.',
+    };
+    final adUnavailableText = switch (localeCode) {
+      'en' => 'Ad unavailable',
+      'ja' => '広告を利用できません',
+      'zh' => '广告不可用',
+      _ => '광고를 사용할 수 없습니다.',
+    };
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (exitModalBanner != null)
+                ValueListenableBuilder<bool>(
+                  valueListenable: isBannerFailed,
+                  builder: (context, failed, _) {
+                    return ValueListenableBuilder<bool>(
+                      valueListenable: isBannerLoaded,
+                      builder: (context, loaded, _) {
+                        if (loaded) {
+                          return SizedBox(
+                            width: 300,
+                            height: 250,
+                            child: AdWidget(ad: exitModalBanner!),
+                          );
+                        }
+                        return Container(
+                          width: 300,
+                          height: 250,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7F7F7),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: failed
+                              ? Text(
+                                  adFailedText,
+                                  style: const TextStyle(
+                                    fontFamily: 'Pretendard',
+                                    fontSize: 12,
+                                    color: Color(0xFF888888),
+                                  ),
+                                )
+                              : const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                        );
+                      },
+                    );
+                  },
+                )
+              else
+                Container(
+                  width: 300,
+                  height: 80,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F7F7),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    adUnavailableText,
+                    style: const TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontSize: 12,
+                      color: Color(0xFF888888),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(
+                cancelText,
+                style: const TextStyle(
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF333333),
+                foregroundColor: Colors.white,
+                elevation: 0,
+              ),
+              child: Text(
+                exitText,
+                style: const TextStyle(
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    dialogActive = false;
+    exitModalBanner?.dispose();
+    isBannerLoaded.dispose();
+    isBannerFailed.dispose();
+    return result;
   }
 
   Future<void> _loadHuntingSession() async {
@@ -991,9 +1255,7 @@ class _RootScreenState extends State<RootScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero,
-          ),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           title: Text(
             l10n.memoTitle,
             style: TextStyle(
@@ -1230,8 +1492,7 @@ class _RootScreenState extends State<RootScreen> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) =>
-                CameraMockScreen(targetColor: _targetColor),
+            builder: (context) => CameraMockScreen(targetColor: _targetColor),
           ),
         );
         return;
@@ -1310,9 +1571,9 @@ class _RootScreenState extends State<RootScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('이미지를 갤러리에 저장했습니다.')));
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.collageSaveError(e.toString()))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.collageSaveError(e.toString()))),
+      );
     }
   }
 
@@ -1406,85 +1667,99 @@ class _RootScreenState extends State<RootScreen> {
               );
           }
 
-          return Scaffold(
-            backgroundColor: Colors.white,
-            appBar: AppBar(
-              title: titleWidget,
-              centerTitle: false,
-              backgroundColor: appBarColor,
-              foregroundColor: appBarForegroundColor,
-              elevation: 0,
-              toolbarHeight: 56,
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.language),
-                  onPressed: () => _showLanguageSheet(context),
-                ),
-              ],
-              bottom: PreferredSize(
-                preferredSize: const Size.fromHeight(1),
-                child: Container(
-                  height: 0.5,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.transparent,
-                        (_selectedIndex == 1 && _isHuntingActive)
-                            ? appBarForegroundColor.withOpacity(0.1)
-                            : const Color(0xFFF0F0F0),
-                        Colors.transparent,
-                      ],
+          return Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: _onIosEdgeSwipePointerDown,
+            onPointerMove: _onIosEdgeSwipePointerMove,
+            onPointerUp: (_) => _resetIosEdgeSwipeTracking(),
+            onPointerCancel: (_) => _resetIosEdgeSwipeTracking(),
+            child: PopScope(
+              canPop: false,
+              onPopInvokedWithResult: (didPop, result) {
+                if (didPop) return;
+                _handleExitRequest();
+              },
+              child: Scaffold(
+                backgroundColor: Colors.white,
+                appBar: AppBar(
+                  title: titleWidget,
+                  centerTitle: false,
+                  backgroundColor: appBarColor,
+                  foregroundColor: appBarForegroundColor,
+                  elevation: 0,
+                  toolbarHeight: 56,
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.language),
+                      onPressed: () => _showLanguageSheet(context),
+                    ),
+                  ],
+                  bottom: PreferredSize(
+                    preferredSize: const Size.fromHeight(1),
+                    child: Container(
+                      height: 0.5,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.transparent,
+                            (_selectedIndex == 1 && _isHuntingActive)
+                                ? appBarForegroundColor.withOpacity(0.1)
+                                : const Color(0xFFF0F0F0),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
+                body: _widgetOptions.elementAt(_selectedIndex),
+                bottomNavigationBar: BottomNavigationBar(
+                  items: [
+                    BottomNavigationBarItem(
+                      icon: Icon(
+                        Icons.circle_outlined,
+                        color: _selectedIndex == 0
+                            ? accentColor
+                            : const Color(0xFF2D2D2D),
+                        size: 28,
+                        weight: 0.5,
+                      ),
+                      label: l10n.navTarget,
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(
+                        Icons.grid_3x3,
+                        color: _selectedIndex == 1
+                            ? accentColor
+                            : const Color(0xFF2D2D2D),
+                        size: 28,
+                        weight: 0.5,
+                      ),
+                      label: l10n.navHunting,
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(
+                        Icons.photo_library_outlined,
+                        color: _selectedIndex == 2
+                            ? accentColor
+                            : const Color(0xFF2D2D2D),
+                        size: 28,
+                        weight: 0.5,
+                      ),
+                      label: l10n.navCollection,
+                    ),
+                  ],
+                  currentIndex: _selectedIndex,
+                  onTap: _onItemTapped,
+                  selectedItemColor: accentColor,
+                  unselectedItemColor: const Color(0xFF2D2D2D),
+                  showSelectedLabels: true,
+                  showUnselectedLabels: true,
+                  type: BottomNavigationBarType.fixed,
+                  backgroundColor: Colors.white,
+                  elevation: 0,
+                ),
               ),
-            ),
-            body: _widgetOptions.elementAt(_selectedIndex),
-            bottomNavigationBar: BottomNavigationBar(
-              items: [
-                BottomNavigationBarItem(
-                  icon: Icon(
-                    Icons.circle_outlined,
-                    color: _selectedIndex == 0
-                        ? accentColor
-                        : const Color(0xFF2D2D2D),
-                    size: 28,
-                    weight: 0.5,
-                  ),
-                  label: l10n.navTarget,
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(
-                    Icons.grid_3x3,
-                    color: _selectedIndex == 1
-                        ? accentColor
-                        : const Color(0xFF2D2D2D),
-                    size: 28,
-                    weight: 0.5,
-                  ),
-                  label: l10n.navHunting,
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(
-                    Icons.photo_library_outlined,
-                    color: _selectedIndex == 2
-                        ? accentColor
-                        : const Color(0xFF2D2D2D),
-                    size: 28,
-                    weight: 0.5,
-                  ),
-                  label: l10n.navCollection,
-                ),
-              ],
-              currentIndex: _selectedIndex,
-              onTap: _onItemTapped,
-              selectedItemColor: accentColor,
-              unselectedItemColor: const Color(0xFF2D2D2D),
-              showSelectedLabels: true,
-              showUnselectedLabels: true,
-              type: BottomNavigationBarType.fixed,
-              backgroundColor: Colors.white,
-              elevation: 0,
             ),
           );
         },
