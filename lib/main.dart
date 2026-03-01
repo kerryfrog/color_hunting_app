@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:convert'; // For JSON encoding/decoding
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 import 'package:camera/camera.dart';
@@ -1375,7 +1374,8 @@ class _RootScreenState extends State<RootScreen> {
               }
               titleWidget = Text(
                 l10n.appbarHunting,
-                style: GoogleFonts.lora(
+                style: TextStyle(
+                  fontFamily: 'Pretendard',
                   color: appBarForegroundColor,
                   fontWeight: FontWeight.w700,
                   fontSize: 20,
@@ -1386,7 +1386,8 @@ class _RootScreenState extends State<RootScreen> {
             case 2: // Archive Tab
               titleWidget = Text(
                 l10n.appbarCollection,
-                style: GoogleFonts.lora(
+                style: const TextStyle(
+                  fontFamily: 'Pretendard',
                   fontWeight: FontWeight.w700,
                   fontSize: 20,
                   letterSpacing: -0.8,
@@ -1396,7 +1397,8 @@ class _RootScreenState extends State<RootScreen> {
             default: // Target Tab
               titleWidget = Text(
                 l10n.appbarTarget,
-                style: GoogleFonts.lora(
+                style: const TextStyle(
+                  fontFamily: 'Pretendard',
                   fontWeight: FontWeight.w700,
                   fontSize: 20,
                   letterSpacing: -0.8,
