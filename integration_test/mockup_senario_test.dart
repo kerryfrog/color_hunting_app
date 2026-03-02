@@ -3,11 +3,11 @@ import 'dart:math';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:image/image.dart' as img;
 
 import 'package:color_hunting_app/main.dart' as app;
 
@@ -17,6 +17,20 @@ const _kTargetColorKey = 'targetColor';
 const _kIsHuntingActiveKey = 'isHuntingActive';
 const _kHuntingStartDateKey = 'huntingStartDate';
 const _kAppLanguageKey = 'appLanguage';
+const _kMockupAssetPaths = <String>[
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-09 001.jpeg',
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-10 002.jpeg',
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-10 003.jpeg',
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-10 004.jpeg',
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-10 005.jpeg',
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-10 006.jpeg',
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-10 007.jpeg',
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-10 008.jpeg',
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-10 009.jpeg',
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-10 010.jpeg',
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-10 011.jpeg',
+  'mockup/KakaoTalk_Photo_2026-02-16-01-39-10 012.jpeg',
+];
 
 Map<String, dynamic> _boardJson({
   required int colorValue,
@@ -36,30 +50,17 @@ Map<String, dynamic> _boardJson({
 
 Future<List<String>> _createMockImages() async {
   final dir = await getApplicationDocumentsDirectory();
-  final existing = <String>[];
-  for (int i = 1; i <= 12; i++) {
-    final p = '${dir.path}/scenario_${i.toString().padLeft(2, '0')}.jpg';
-    if (File(p).existsSync()) {
-      existing.add(p);
-    }
-  }
-  if (existing.length == 12) {
-    return existing;
-  }
-
-  final random = Random(42);
   final files = <String>[];
-
-  for (int i = 0; i < 12; i++) {
-    final image = img.Image(width: 720, height: 720);
-    final r = 80 + random.nextInt(176);
-    final g = 80 + random.nextInt(176);
-    final b = 80 + random.nextInt(176);
-    img.fill(image, color: img.ColorRgb8(r, g, b));
-
-    final path = '${dir.path}/mockup_$i.jpg';
-    final file = File(path);
-    await file.writeAsBytes(img.encodeJpg(image, quality: 92));
+  for (int i = 0; i < _kMockupAssetPaths.length; i++) {
+    final assetPath = _kMockupAssetPaths[i];
+    final path =
+        '${dir.path}/scenario_${(i + 1).toString().padLeft(2, '0')}.jpg';
+    final data = await rootBundle.load(assetPath);
+    final bytes = data.buffer.asUint8List(
+      data.offsetInBytes,
+      data.lengthInBytes,
+    );
+    await File(path).writeAsBytes(bytes, flush: true);
     files.add(path);
   }
 
@@ -73,7 +74,10 @@ Future<void> _seedStep1() async {
   await prefs.setInt(_kTargetColorKey, const Color(0xFFFDC103).toARGB32());
   await prefs.setBool(_kIsHuntingActiveKey, false);
   await prefs.setStringList(_kCurrentHuntingGridKey, List.filled(12, ''));
-  await prefs.setString(_kSavedColorBoardsKey, jsonEncode(<Map<String, dynamic>>[]));
+  await prefs.setString(
+    _kSavedColorBoardsKey,
+    jsonEncode(<Map<String, dynamic>>[]),
+  );
 }
 
 Future<void> _seedStep2(List<String> images) async {
@@ -82,7 +86,10 @@ Future<void> _seedStep2(List<String> images) async {
   await prefs.setString(_kAppLanguageKey, 'ko');
   await prefs.setInt(_kTargetColorKey, const Color(0xFFFDC103).toARGB32());
   await prefs.setBool(_kIsHuntingActiveKey, true);
-  await prefs.setString(_kHuntingStartDateKey, DateTime.now().toIso8601String());
+  await prefs.setString(
+    _kHuntingStartDateKey,
+    DateTime.now().toIso8601String(),
+  );
 
   final slots = List<String>.filled(12, '');
   final indices = List<int>.generate(12, (i) => i)..shuffle(Random(7));
@@ -90,7 +97,10 @@ Future<void> _seedStep2(List<String> images) async {
     slots[indices[i]] = images[i];
   }
   await prefs.setStringList(_kCurrentHuntingGridKey, slots);
-  await prefs.setString(_kSavedColorBoardsKey, jsonEncode(<Map<String, dynamic>>[]));
+  await prefs.setString(
+    _kSavedColorBoardsKey,
+    jsonEncode(<Map<String, dynamic>>[]),
+  );
 }
 
 Future<void> _seedStep45(List<String> images) async {
@@ -190,7 +200,9 @@ void main() {
     await binding.takeScreenshot('03_camera_screen');
   });
 
-  testWidgets('04 collection tab with 4 records including fdc103', (tester) async {
+  testWidgets('04 collection tab with 4 records including fdc103', (
+    tester,
+  ) async {
     final images = await _createMockImages();
     await _seedStep45(images);
     await _launchApp(tester);
